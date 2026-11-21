@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\Role;
+use App\Queries\LowStock;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -42,6 +44,10 @@ class HandleInertiaRequests extends Middleware
                 'user' => $request->user(),
                 'roles' => $request->user()?->getRoleNames()->values()->all() ?? [],
             ],
+            // Sidebar badge for staff who restock; resolved lazily, skipped for everyone else.
+            'lowStockCount' => fn () => $request->user()?->hasAnyRole([Role::Owner->value, Role::Warehouse->value])
+                ? LowStock::count()
+                : null,
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

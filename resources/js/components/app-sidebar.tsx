@@ -1,4 +1,4 @@
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import {
     ClipboardList,
     LayoutGrid,
@@ -34,6 +34,7 @@ import type { NavItem } from '@/types';
 
 export function AppSidebar() {
     const { canSell, canManageStock } = useRoles();
+    const { lowStockCount } = usePage().props;
 
     const groups: { label: string; items: NavItem[] }[] = [
         {
@@ -75,6 +76,7 @@ export function AppSidebar() {
                               title: 'Produk',
                               href: products.index(),
                               icon: Package,
+                              badge: lowStockCount ?? undefined,
                           },
                           {
                               title: 'Kategori',

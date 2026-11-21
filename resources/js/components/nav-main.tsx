@@ -27,7 +27,10 @@ export function NavMain({ items, label }: { items: NavItem[]; label: string }) {
                                 {item.icon && <item.icon />}
                                 <span>{item.title}</span>
                                 {item.badge ? (
-                                    <span className="ml-auto rounded-full bg-destructive px-1.5 text-xs font-semibold text-white tabular-nums group-data-[collapsible=icon]:hidden">
+                                    <span
+                                        title={`${item.badge} produk stok menipis`}
+                                        className="ml-auto rounded-full bg-destructive px-1.5 text-xs font-semibold text-white tabular-nums group-data-[collapsible=icon]:hidden"
+                                    >
                                         {item.badge}
                                     </span>
                                 ) : null}
