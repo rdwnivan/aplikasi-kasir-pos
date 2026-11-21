@@ -67,11 +67,20 @@ final class ReceiveGoods
                     'unit_price' => $line['unit_price'],
                     'subtotal' => $subtotal,
                 ]);
+            }
+
+            // Book stock in product-id order, the same lock order checkout uses, so a
+            // receipt and a sale touching the same products cannot deadlock.
+            $order = array_keys($items);
+            usort($order, fn (int $a, int $b) => [$items[$a]['product_id'], $a] <=> [$items[$b]['product_id'], $b]);
+
+            foreach ($order as $i) {
+                $unit = $units[$i];
 
                 $this->ledger->receive(
                     $unit->product,
-                    $line['qty'] * $unit->conversion,
-                    Decimal::div((string) $line['unit_price'], (string) $unit->conversion),
+                    $items[$i]['qty'] * $unit->conversion,
+                    Decimal::div((string) $items[$i]['unit_price'], (string) $unit->conversion),
                     StockMovementType::Purchase,
                     reference: $receipt,
                     user: $user,
