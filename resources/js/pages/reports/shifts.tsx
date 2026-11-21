@@ -1,7 +1,7 @@
 import { Head } from '@inertiajs/react';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { PageHeader } from '@/components/page-header';
-import { ReportNav } from '@/components/reports/report-nav';
+import { ExportButton, ReportNav } from '@/components/reports/report-nav';
 import { Badge } from '@/components/ui/badge';
 import {
     Table,
@@ -75,11 +75,16 @@ export default function ShiftsReport({
                     description="Shift dipilih berdasarkan waktu dibuka. Selisih = uang dihitung − kas seharusnya."
                 />
                 <ReportNav />
-                <DateRangeFilter
-                    url={reports.shifts.url()}
-                    from={filters.from}
-                    to={filters.to}
-                />
+                <div className="flex flex-wrap items-center gap-2">
+                    <DateRangeFilter
+                        url={reports.shifts.url()}
+                        from={filters.from}
+                        to={filters.to}
+                    />
+                    <ExportButton
+                        href={reports.export.shifts.url({ query: filters })}
+                    />
+                </div>
 
                 <section className="space-y-2">
                     <h2 className="text-sm font-medium">Per kasir</h2>

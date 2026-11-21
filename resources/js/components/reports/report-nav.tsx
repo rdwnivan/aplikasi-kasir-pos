@@ -1,4 +1,6 @@
 import { Link } from '@inertiajs/react';
+import { FileSpreadsheet } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { cn } from '@/lib/utils';
 import reports from '@/routes/reports';
@@ -63,5 +65,16 @@ export function StatCard({
                 <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
             )}
         </div>
+    );
+}
+
+/** Plain link (not an Inertia visit): the server answers with an .xlsx file. */
+export function ExportButton({ href }: { href: string }) {
+    return (
+        <Button variant="outline" size="sm" asChild className="sm:ml-auto">
+            <a href={href} download>
+                <FileSpreadsheet /> Ekspor Excel
+            </a>
+        </Button>
     );
 }

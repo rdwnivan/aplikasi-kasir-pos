@@ -1,7 +1,11 @@
 import { Head, router } from '@inertiajs/react';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { PageHeader } from '@/components/page-header';
-import { ReportNav, StatCard } from '@/components/reports/report-nav';
+import {
+    ExportButton,
+    ReportNav,
+    StatCard,
+} from '@/components/reports/report-nav';
 import {
     Table,
     TableBody,
@@ -90,6 +94,9 @@ export default function SalesReport({
                         from={filters.from}
                         to={filters.to}
                         extra={{ group: filters.group }}
+                    />
+                    <ExportButton
+                        href={reports.export.sales.url({ query: filters })}
                     />
                 </div>
 

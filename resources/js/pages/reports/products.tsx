@@ -1,7 +1,7 @@
 import { Head, Link } from '@inertiajs/react';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { PageHeader } from '@/components/page-header';
-import { ReportNav } from '@/components/reports/report-nav';
+import { ExportButton, ReportNav } from '@/components/reports/report-nav';
 import {
     Table,
     TableBody,
@@ -46,11 +46,16 @@ export default function ProductsReport({
                     description="Diurutkan dari jumlah terjual (satuan dasar) dikurangi retur."
                 />
                 <ReportNav />
-                <DateRangeFilter
-                    url={reports.products.url()}
-                    from={filters.from}
-                    to={filters.to}
-                />
+                <div className="flex flex-wrap items-center gap-2">
+                    <DateRangeFilter
+                        url={reports.products.url()}
+                        from={filters.from}
+                        to={filters.to}
+                    />
+                    <ExportButton
+                        href={reports.export.products.url({ query: filters })}
+                    />
+                </div>
 
                 <div className="rounded-xl border">
                     <Table>

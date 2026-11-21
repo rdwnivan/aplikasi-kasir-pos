@@ -20,7 +20,7 @@ final class SalesSummary
 {
     /**
      * @param  'day'|'month'  $group
-     * @return array{rows: list<array<string, int|float|string>>, totals: array<string, int|float>}
+     * @return array{rows: list<array{period: string, transactions: int, gross: int, cash: int, qris: int, refunds: int, tax: int, netSales: int, cogs: int, grossProfit: int, margin: float}>, totals: array{transactions: int, gross: int, cash: int, qris: int, refunds: int, tax: int, netSales: int, cogs: int, grossProfit: int, margin: float, averageTicket: int}}
      */
     public static function build(DateRange $range, string $group = 'day'): array
     {
@@ -75,7 +75,7 @@ final class SalesSummary
         $totals = ['transactions' => 0, 'gross' => 0, 'cash' => 0, 'qris' => 0, 'refunds' => 0, 'tax' => 0, 'netSales' => 0, 'cogs' => 0, 'grossProfit' => 0];
         foreach ($rows as $row) {
             foreach (array_keys($totals) as $key) {
-                $totals[$key] += (int) $row[$key];
+                $totals[$key] += $row[$key];
             }
         }
         $totals['margin'] = self::margin($totals['grossProfit'], $totals['netSales']);
@@ -84,7 +84,7 @@ final class SalesSummary
         return ['rows' => $rows, 'totals' => $totals];
     }
 
-    /** @return array<string, int|float|string> */
+    /** @return array{period: string, transactions: int, gross: int, cash: int, qris: int, refunds: int, tax: int, netSales: int, cogs: int, grossProfit: int, margin: float} */
     private static function row(
         string $bucket,
         int $transactions,

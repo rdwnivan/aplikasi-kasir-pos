@@ -1,6 +1,10 @@
 import { Head, Link } from '@inertiajs/react';
 import { PageHeader } from '@/components/page-header';
-import { ReportNav, StatCard } from '@/components/reports/report-nav';
+import {
+    ExportButton,
+    ReportNav,
+    StatCard,
+} from '@/components/reports/report-nav';
 import {
     Table,
     TableBody,
@@ -47,6 +51,9 @@ export default function InventoryReport({
                     description={`Stok × HPP rata-rata saat ini (${formatDateTime(asOf)}). Produk aktif saja.`}
                 />
                 <ReportNav />
+                <div className="flex">
+                    <ExportButton href={reports.export.inventory.url()} />
+                </div>
 
                 <div className="grid gap-3 sm:grid-cols-3">
                     <StatCard
