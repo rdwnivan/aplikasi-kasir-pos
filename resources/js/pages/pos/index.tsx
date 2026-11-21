@@ -480,8 +480,10 @@ export default function PosIndex({
                         variant="outline"
                         size="sm"
                         onClick={() => setDialog('held')}
+                        aria-label="Transaksi ditahan"
                     >
-                        <PauseCircle /> Ditahan
+                        <PauseCircle />
+                        <span className="hidden sm:inline">Ditahan</span>
                         {heldSales.length > 0 && (
                             <Badge className="ml-1 px-1.5">
                                 {heldSales.length}
@@ -490,13 +492,20 @@ export default function PosIndex({
                         <Kbd className="ml-1 hidden md:inline-flex">F8</Kbd>
                     </Button>
                     <Button variant="ghost" size="sm" asChild>
-                        <Link href={pos.sales.index()}>
-                            <History /> Riwayat
+                        <Link
+                            href={pos.sales.index()}
+                            aria-label="Riwayat transaksi"
+                        >
+                            <History />
+                            <span className="hidden sm:inline">Riwayat</span>
                         </Link>
                     </Button>
                     <Button variant="ghost" size="sm" asChild>
-                        <Link href={pos.shift.edit()}>
-                            <LogOut /> Tutup shift
+                        <Link href={pos.shift.edit()} aria-label="Tutup shift">
+                            <LogOut />
+                            <span className="hidden sm:inline">
+                                Tutup shift
+                            </span>
                         </Link>
                     </Button>
                     <Button
@@ -511,8 +520,8 @@ export default function PosIndex({
                     </Button>
                 </header>
 
-                <main className="grid min-h-0 flex-1 gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_420px]">
-                    <section className="flex min-h-[40vh] flex-col overflow-hidden rounded-xl border bg-background lg:min-h-0">
+                <main className="grid min-h-0 flex-1 grid-rows-[minmax(10rem,2fr)_minmax(17rem,3fr)] gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-1">
+                    <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border bg-background">
                         <div className="border-b p-3">
                             <div className="relative">
                                 <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -544,7 +553,7 @@ export default function PosIndex({
                         />
                     </section>
 
-                    <aside className="flex min-h-[50vh] flex-col overflow-hidden rounded-xl border bg-background lg:min-h-0">
+                    <aside className="flex min-h-0 flex-col overflow-hidden rounded-xl border bg-background">
                         <div className="flex items-center justify-between border-b px-4 py-3">
                             <div>
                                 <div className="font-semibold">Keranjang</div>
