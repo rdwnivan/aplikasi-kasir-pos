@@ -18,6 +18,8 @@ final class DocumentNumber
 
     public const SALE = 'INV';
 
+    public const SALE_RETURN = 'RET';
+
     public function next(string $prefix, ?CarbonInterface $date = null): string
     {
         $key = $prefix.'-'.($date ?? now())->format('Ymd');

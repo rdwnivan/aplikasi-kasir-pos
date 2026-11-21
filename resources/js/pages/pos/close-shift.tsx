@@ -57,6 +57,12 @@ export default function CloseShift({
                                 label={`Penjualan tunai (${shift.salesCount} transaksi)`}
                                 value={formatRupiah(shift.cashSalesTotal)}
                             />
+                            {shift.refundsCount > 0 && (
+                                <Row
+                                    label={`Retur tunai (${shift.refundsCount})`}
+                                    value={formatRupiah(-shift.refundsTotal)}
+                                />
+                            )}
                             <Separator className="my-2" />
                             <Row
                                 label="Kas seharusnya"

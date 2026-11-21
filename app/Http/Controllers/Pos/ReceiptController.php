@@ -28,6 +28,7 @@ class ReceiptController extends Controller
             'store' => config('pos.store'),
             'width' => $request->integer('w') === 80 ? 80 : 58,
             'autoPrint' => $request->boolean('print'),
+            'isCopy' => $request->boolean('copy'),
         ]);
     }
 }

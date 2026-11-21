@@ -42,13 +42,26 @@ class Shift extends Model
         return $this->closed_at === null;
     }
 
-    /** Cash that should be in the drawer right now: float plus completed cash sales. */
+    /**
+     * Cash that should be in the drawer right now: float plus completed cash sales, minus
+     * cash refunded for returns processed in this shift (whatever shift the sale was in).
+     */
     public function expectedCash(): int
     {
-        return $this->opening_cash + (int) $this->sales()
+        return $this->opening_cash + $this->cashSalesTotal() - $this->refundsTotal();
+    }
+
+    public function cashSalesTotal(): int
+    {
+        return (int) $this->sales()
             ->where('status', SaleStatus::Completed)
             ->where('payment_method', PaymentMethod::Cash)
             ->sum('total');
+    }
+
+    public function refundsTotal(): int
+    {
+        return (int) $this->returns()->sum('total');
     }
 
     /** @param Builder<Shift> $query */
@@ -67,5 +80,11 @@ class Shift extends Model
     public function sales(): HasMany
     {
         return $this->hasMany(Sale::class);
+    }
+
+    /** @return HasMany<SaleReturn, $this> */
+    public function returns(): HasMany
+    {
+        return $this->hasMany(SaleReturn::class);
     }
 }

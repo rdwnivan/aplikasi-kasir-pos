@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\DiscountType;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property int $id
@@ -42,6 +43,12 @@ class SaleItem extends Model
     public function baseQty(): int
     {
         return $this->qty * $this->conversion;
+    }
+
+    /** @return HasMany<SaleReturnItem, $this> */
+    public function returnItems(): HasMany
+    {
+        return $this->hasMany(SaleReturnItem::class);
     }
 
     /** @return BelongsTo<Product, $this> */

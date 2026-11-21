@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Enums\Role;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 /**
  * Public demo accounts, one per role. All use the password "password" (documented in the
@@ -17,6 +18,9 @@ class DemoUserSeeder extends Seeder
         ['name' => 'Siti Rahmawati', 'email' => 'gudang@kasir.test', 'role' => Role::Warehouse],
         ['name' => 'Andi Pratama', 'email' => 'kasir@kasir.test', 'role' => Role::Cashier],
     ];
+
+    /** Documented in the README next to the demo accounts. */
+    public const DEMO_OWNER_PIN = '1234';
 
     public function run(): void
     {
@@ -31,6 +35,11 @@ class DemoUserSeeder extends Seeder
             );
 
             $user->syncRoles([$account['role']->value]);
+
+            // The owner's approval PIN for returns, so the demo works out of the box.
+            if ($account['role'] === Role::Owner && $user->pin_hash === null) {
+                $user->forceFill(['pin_hash' => Hash::make(self::DEMO_OWNER_PIN)])->save();
+            }
         }
     }
 }

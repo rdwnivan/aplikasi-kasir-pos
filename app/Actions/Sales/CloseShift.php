@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Closes the drawer: expected = float + cash sales, difference = counted − expected
+ * Closes the drawer: expected = float + cash sales − cash refunds, difference = counted − expected
  * (negative means cash is missing). Held carts must be finished or discarded first.
  */
 final class CloseShift

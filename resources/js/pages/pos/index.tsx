@@ -1,5 +1,6 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
+    History,
     LayoutGrid,
     LogOut,
     PauseCircle,
@@ -460,6 +461,11 @@ export default function PosIndex({
                             </Badge>
                         )}
                         <Kbd className="ml-1 hidden md:inline-flex">F8</Kbd>
+                    </Button>
+                    <Button variant="ghost" size="sm" asChild>
+                        <Link href={pos.sales.index()}>
+                            <History /> Riwayat
+                        </Link>
                     </Button>
                     <Button variant="ghost" size="sm" asChild>
                         <Link href={pos.shift.edit()}>

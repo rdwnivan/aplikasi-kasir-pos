@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\Role;
+use App\Http\Controllers\Settings\OwnerPinController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use Illuminate\Auth\Middleware\RequirePassword;
@@ -24,6 +26,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('user-password.update');
 
     Route::inertia('settings/appearance', 'settings/appearance')->name('appearance.edit');
+
+    Route::middleware('role:'.Role::Owner->value)->group(function () {
+        Route::get('settings/pin', [OwnerPinController::class, 'edit'])->name('owner-pin.edit');
+        Route::put('settings/pin', [OwnerPinController::class, 'update'])
+            ->middleware('throttle:6,1')
+            ->name('owner-pin.update');
+    });
 });
 
 Route::get('.well-known/passkey-endpoints', function () {

@@ -73,6 +73,12 @@ class Sale extends Model
         return $this->belongsTo(User::class);
     }
 
+    /** @return HasMany<SaleReturn, $this> */
+    public function returns(): HasMany
+    {
+        return $this->hasMany(SaleReturn::class);
+    }
+
     /** @return MorphMany<StockMovement, $this> */
     public function stockMovements(): MorphMany
     {

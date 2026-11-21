@@ -36,6 +36,8 @@ export type ShiftSummary = {
     openingCash: number;
     salesCount: number;
     cashSalesTotal: number;
+    refundsCount: number;
+    refundsTotal: number;
     expectedCash: number;
 };
 

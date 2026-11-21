@@ -33,8 +33,8 @@
 </head>
 <body>
     <div class="toolbar">
-        <a href="?w=58">58 mm</a>
-        <a href="?w=80">80 mm</a>
+        <a href="?w=58{{ $isCopy ? '&copy=1' : '' }}">58 mm</a>
+        <a href="?w=80{{ $isCopy ? '&copy=1' : '' }}">80 mm</a>
         <button type="button" onclick="window.print()">Cetak</button>
     </div>
 
@@ -44,6 +44,9 @@
         @if ($store['phone']) <div>Telp. {{ $store['phone'] }}</div> @endif
         @if ($store['npwp']) <div>NPWP {{ $store['npwp'] }}</div> @endif
     </div>
+    @if ($isCopy)
+        <div class="c b" style="margin-top:1mm">*** SALINAN / CETAK ULANG ***</div>
+    @endif
     <hr>
     <table class="muted">
         <tr><td>No</td><td class="r">{{ $sale->number }}</td></tr>

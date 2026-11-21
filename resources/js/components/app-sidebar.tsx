@@ -3,6 +3,7 @@ import {
     ClipboardList,
     LayoutGrid,
     PackageOpen,
+    ReceiptText,
     Package,
     Ruler,
     ShoppingCart,
@@ -47,6 +48,11 @@ export function AppSidebar() {
                               title: 'Kasir',
                               href: pos.index(),
                               icon: ShoppingCart,
+                          },
+                          {
+                              title: 'Riwayat transaksi',
+                              href: pos.sales.index(),
+                              icon: ReceiptText,
                           },
                       ]
                     : []),

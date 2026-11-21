@@ -2,14 +2,16 @@
 
 namespace App\Http\Controllers\Catalog;
 
+use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Models\GoodsReceipt;
 use App\Models\Product;
 use App\Models\Sale;
+use App\Models\SaleReturn;
 use App\Models\StockMovement;
 use App\Models\StockOpname;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Route;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -19,8 +21,9 @@ use Inertia\Response;
  */
 class StockCardController extends Controller
 {
-    public function show(Product $product): Response
+    public function show(Request $request, Product $product): Response
     {
+        $canSeeSales = $request->user()->hasRole(Role::Owner->value);
         $product->load('baseUnit');
 
         $movements = $product->stockMovements()
@@ -38,7 +41,7 @@ class StockCardController extends Controller
                 'avgCostAfter' => (float) $m->avg_cost_after,
                 'user' => $m->user?->name,
                 'note' => $m->note,
-                'reference' => self::reference($m->reference),
+                'reference' => self::reference($m->reference, $canSeeSales),
             ]);
 
         return Inertia::render('catalog/products/stock-card', [
@@ -57,12 +60,13 @@ class StockCardController extends Controller
     }
 
     /** @return array{label: string, url: string|null}|null */
-    private static function reference(?Model $reference): ?array
+    private static function reference(?Model $reference, bool $canSeeSales): ?array
     {
         [$label, $route] = match (true) {
             $reference instanceof GoodsReceipt => [$reference->number, 'goods-receipts.show'],
             $reference instanceof StockOpname => [$reference->number, 'stock-opnames.show'],
-            $reference instanceof Sale => [$reference->number ?? '#'.$reference->id, 'sales.show'],
+            $reference instanceof Sale => [$reference->number ?? '#'.$reference->id, 'pos.sales.show'],
+            $reference instanceof SaleReturn => [$reference->number, 'pos.sales.show'],
             default => [null, null],
         };
 
@@ -70,9 +74,13 @@ class StockCardController extends Controller
             return null;
         }
 
+        // Sales live on the till side; warehouse staff get the number without a link.
+        $target = $reference instanceof SaleReturn ? $reference->sale_id : $reference->getKey();
+        $allowed = $route !== 'pos.sales.show' || $canSeeSales;
+
         return [
             'label' => $label,
-            'url' => Route::has($route) ? route($route, $reference->getKey()) : null,
+            'url' => $allowed ? route($route, $target) : null,
         ];
     }
 }

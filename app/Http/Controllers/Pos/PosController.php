@@ -44,16 +44,17 @@ class PosController extends Controller
     /** @return array<string, mixed> */
     public static function shiftSummary(Shift $shift): array
     {
-        $cashSales = $shift->sales()
-            ->where('status', SaleStatus::Completed)
-            ->where('payment_method', PaymentMethod::Cash);
-
         return [
             'id' => $shift->id,
             'openedAt' => $shift->opened_at->toIso8601String(),
             'openingCash' => $shift->opening_cash,
-            'salesCount' => (clone $cashSales)->count(),
-            'cashSalesTotal' => (int) (clone $cashSales)->sum('total'),
+            'salesCount' => $shift->sales()
+                ->where('status', SaleStatus::Completed)
+                ->where('payment_method', PaymentMethod::Cash)
+                ->count(),
+            'cashSalesTotal' => $shift->cashSalesTotal(),
+            'refundsCount' => $shift->returns()->count(),
+            'refundsTotal' => $shift->refundsTotal(),
             'expectedCash' => $shift->expectedCash(),
         ];
     }
