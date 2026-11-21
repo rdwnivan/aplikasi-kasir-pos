@@ -1,6 +1,8 @@
 import { Link } from '@inertiajs/react';
 import {
+    ClipboardList,
     LayoutGrid,
+    PackageOpen,
     Package,
     Ruler,
     ShoppingCart,
@@ -22,8 +24,10 @@ import {
 import { useRoles } from '@/hooks/use-roles';
 import { dashboard } from '@/routes';
 import categories from '@/routes/categories';
+import goodsReceipts from '@/routes/goods-receipts';
 import pos from '@/routes/pos';
 import products from '@/routes/products';
+import stockOpnames from '@/routes/stock-opnames';
 import suppliers from '@/routes/suppliers';
 import units from '@/routes/units';
 import type { NavItem } from '@/types';
@@ -49,6 +53,21 @@ export function AppSidebar() {
         },
         ...(canManageStock
             ? [
+                  {
+                      label: 'Inventori',
+                      items: [
+                          {
+                              title: 'Penerimaan barang',
+                              href: goodsReceipts.index(),
+                              icon: PackageOpen,
+                          },
+                          {
+                              title: 'Stok opname',
+                              href: stockOpnames.index(),
+                              icon: ClipboardList,
+                          },
+                      ],
+                  },
                   {
                       label: 'Master data',
                       items: [

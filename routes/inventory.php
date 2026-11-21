@@ -6,6 +6,8 @@ use App\Http\Controllers\Catalog\ProductController;
 use App\Http\Controllers\Catalog\StockCardController;
 use App\Http\Controllers\Catalog\SupplierController;
 use App\Http\Controllers\Catalog\UnitController;
+use App\Http\Controllers\Inventory\GoodsReceiptController;
+use App\Http\Controllers\Inventory\StockOpnameController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -36,4 +38,15 @@ Route::middleware(['auth', 'verified', 'role:'.Role::Owner->value.'|'.Role::Ware
     Route::resource('supplier', SupplierController::class)
         ->only(['index', 'store', 'update', 'destroy'])
         ->names('suppliers');
+
+    Route::resource('penerimaan', GoodsReceiptController::class)
+        ->only(['index', 'create', 'store', 'show'])
+        ->parameters(['penerimaan' => 'goodsReceipt'])
+        ->names('goods-receipts');
+
+    Route::resource('stok-opname', StockOpnameController::class)
+        ->parameters(['stok-opname' => 'stockOpname'])
+        ->names('stock-opnames');
+    Route::post('stok-opname/{stockOpname}/posting', [StockOpnameController::class, 'post'])
+        ->name('stock-opnames.post');
 });

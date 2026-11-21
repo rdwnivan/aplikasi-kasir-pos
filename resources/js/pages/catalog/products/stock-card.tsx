@@ -156,10 +156,10 @@ export default function StockCard({
                                     <TableCell className="text-right font-medium tabular-nums">
                                         {formatQty(m.stockAfter)}
                                     </TableCell>
-                                    <TableCell className="text-right tabular-nums">
+                                    <TableCell className="text-right whitespace-nowrap tabular-nums">
                                         {formatCost(m.unitCost)}
                                     </TableCell>
-                                    <TableCell className="text-right tabular-nums">
+                                    <TableCell className="text-right whitespace-nowrap tabular-nums">
                                         {formatCost(m.avgCostAfter)}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">
