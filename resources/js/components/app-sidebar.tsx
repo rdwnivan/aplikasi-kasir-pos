@@ -1,5 +1,6 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
+    ChartColumn,
     ClipboardList,
     LayoutGrid,
     PackageOpen,
@@ -28,13 +29,14 @@ import categories from '@/routes/categories';
 import goodsReceipts from '@/routes/goods-receipts';
 import pos from '@/routes/pos';
 import products from '@/routes/products';
+import reports from '@/routes/reports';
 import stockOpnames from '@/routes/stock-opnames';
 import suppliers from '@/routes/suppliers';
 import units from '@/routes/units';
 import type { NavItem } from '@/types';
 
 export function AppSidebar() {
-    const { canSell, canManageStock } = useRoles();
+    const { canSell, canManageStock, isOwner } = useRoles();
     const { lowStockCount } = usePage().props;
 
     const groups: { label: string; items: NavItem[] }[] = [
@@ -58,6 +60,20 @@ export function AppSidebar() {
                     : []),
             ],
         },
+        ...(isOwner
+            ? [
+                  {
+                      label: 'Laporan',
+                      items: [
+                          {
+                              title: 'Laporan',
+                              href: reports.sales(),
+                              icon: ChartColumn,
+                          },
+                      ],
+                  },
+              ]
+            : []),
         ...(canManageStock
             ? [
                   {
