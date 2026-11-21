@@ -27,6 +27,10 @@ final class CloseShift
                 throw ValidationException::withMessages(['shift' => 'Shift ini sudah ditutup.']);
             }
 
+            if ($locked->sales()->where('status', SaleStatus::PendingPayment)->exists()) {
+                throw ValidationException::withMessages(['shift' => 'Masih ada QRIS yang menunggu pembayaran. Selesaikan atau batalkan dulu.']);
+            }
+
             if ($locked->sales()->where('status', SaleStatus::Held)->exists()) {
                 throw ValidationException::withMessages(['shift' => 'Masih ada transaksi yang ditahan. Selesaikan atau hapus dulu.']);
             }

@@ -9,6 +9,7 @@ use App\Models\ProductUnit;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\Shift;
+use App\Services\Payments\MidtransClient;
 use App\Services\Sales\TaxSettings;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -16,7 +17,7 @@ use Inertia\Response;
 
 class PosController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, MidtransClient $midtrans): Response
     {
         $shift = Shift::query()->open()->where('user_id', $request->user()->id)->first();
 
@@ -38,6 +39,8 @@ class PosController extends Controller
                 'pricesIncludeTax' => $tax->pricesIncludeTax,
             ],
             'lastSale' => self::lastSale($request),
+            'qrisEnabled' => $midtrans->isConfigured(),
+            'pendingQris' => self::pendingQris($shift),
         ]);
     }
 
@@ -119,12 +122,28 @@ class PosController extends Controller
         $id = $request->session()->get('last_sale_id');
         $sale = is_numeric($id) ? Sale::query()->where('user_id', $request->user()->id)->find((int) $id) : null;
 
-        return $sale === null ? null : [
+        return $sale === null || $sale->status !== SaleStatus::Completed ? null : [
             'id' => $sale->id,
             'number' => $sale->number,
             'total' => $sale->total,
             'paid' => $sale->paid_amount,
             'change' => $sale->change_amount,
+            'method' => $sale->payment_method?->value,
+        ];
+    }
+
+    /** @return array<string, mixed>|null The QRIS this till is waiting on, if any. */
+    private static function pendingQris(Shift $shift): ?array
+    {
+        $sale = $shift->sales()->where('status', SaleStatus::PendingPayment)->latest('id')->first();
+
+        return $sale === null ? null : [
+            'id' => $sale->id,
+            'number' => $sale->number,
+            'total' => $sale->total,
+            'qrUrl' => $sale->qr_url,
+            'qrString' => $sale->qr_string,
+            'expiresAt' => $sale->payment_expires_at?->toIso8601String(),
         ];
     }
 }

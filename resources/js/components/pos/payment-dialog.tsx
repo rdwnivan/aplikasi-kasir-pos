@@ -1,3 +1,4 @@
+import { Banknote, QrCode } from 'lucide-react';
 import { useState } from 'react';
 import { useOpenKey } from '@/hooks/use-open-key';
 import { Kbd } from '@/components/pos/kbd';
@@ -11,6 +12,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { formatRupiah, suggestedPayments } from '@/lib/money';
 import { cn } from '@/lib/utils';
 
@@ -19,8 +21,10 @@ type Props = {
     total: number;
     processing: boolean;
     error?: string;
+    qrisEnabled: boolean;
     onOpenChange: (open: boolean) => void;
     onPay: (paid: number) => void;
+    onQris: () => void;
 };
 
 export function PaymentDialog(props: Props) {
@@ -35,7 +39,70 @@ export function PaymentDialog(props: Props) {
     );
 }
 
-function PaymentForm({ total, processing, error, onPay }: Props) {
+function PaymentForm(props: Props) {
+    const [method, setMethod] = useState<'cash' | 'qris'>('cash');
+
+    return (
+        <div className="space-y-5">
+            <ToggleGroup
+                type="single"
+                variant="outline"
+                className="w-full"
+                value={method}
+                onValueChange={(v) => v && setMethod(v as 'cash' | 'qris')}
+            >
+                <ToggleGroupItem value="cash" className="flex-1">
+                    <Banknote /> Tunai
+                </ToggleGroupItem>
+                <ToggleGroupItem value="qris" className="flex-1">
+                    <QrCode /> QRIS
+                </ToggleGroupItem>
+            </ToggleGroup>
+            {method === 'cash' ? (
+                <CashForm {...props} />
+            ) : (
+                <QrisForm {...props} />
+            )}
+        </div>
+    );
+}
+
+function QrisForm({ total, processing, error, qrisEnabled, onQris }: Props) {
+    return (
+        <div className="space-y-5">
+            <DialogHeader>
+                <DialogTitle>Pembayaran QRIS</DialogTitle>
+                <DialogDescription>Total belanja</DialogDescription>
+                <div className="text-4xl font-bold tracking-tight tabular-nums">
+                    {formatRupiah(total)}
+                </div>
+            </DialogHeader>
+            {qrisEnabled ? (
+                <p className="text-sm text-muted-foreground">
+                    Kode QR dibuat lewat Midtrans dan berlaku 15 menit. Stok
+                    baru berkurang setelah pembayaran diterima.
+                </p>
+            ) : (
+                <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                    QRIS belum aktif. Isi MIDTRANS_SERVER_KEY dan
+                    MIDTRANS_CLIENT_KEY di file .env.
+                </p>
+            )}
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button
+                type="button"
+                size="lg"
+                className="w-full"
+                disabled={!qrisEnabled || processing}
+                onClick={onQris}
+            >
+                <QrCode /> {processing ? 'Membuat QRIS…' : 'Tampilkan QRIS'}
+            </Button>
+        </div>
+    );
+}
+
+function CashForm({ total, processing, error, onPay }: Props) {
     const [paid, setPaid] = useState(0);
     const enough = paid >= total;
 

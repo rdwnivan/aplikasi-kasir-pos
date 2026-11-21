@@ -55,4 +55,14 @@ export type LastSale = {
     total: number;
     paid: number;
     change: number;
+    method: 'cash' | 'qris' | null;
+};
+
+export type PendingQris = {
+    id: number;
+    number: string;
+    total: number;
+    qrUrl: string | null;
+    qrString: string | null;
+    expiresAt: string | null;
 };

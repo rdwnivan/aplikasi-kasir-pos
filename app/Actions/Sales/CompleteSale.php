@@ -5,13 +5,11 @@ namespace App\Actions\Sales;
 use App\Enums\DiscountType;
 use App\Enums\PaymentMethod;
 use App\Enums\SaleStatus;
-use App\Enums\StockMovementType;
 use App\Models\Sale;
 use App\Models\User;
 use App\Services\Documents\DocumentNumber;
 use App\Services\Inventory\StockLedger;
 use App\Services\Sales\CartBuilder;
-use App\Support\Decimal;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -23,7 +21,7 @@ use Illuminate\Validation\ValidationException;
  */
 final class CompleteSale
 {
-    use ResolvesOpenShift;
+    use BooksSaleStock, ResolvesOpenShift;
 
     public function __construct(
         private readonly CartBuilder $carts,
@@ -68,28 +66,8 @@ final class CompleteSale
                 'completed_at' => now(),
             ]);
 
-            $items = $cart->writeItems($sale);
-
-            // Lock products in a fixed order (by id) so two checkouts sharing products
-            // can never deadlock waiting on each other.
-            $byProduct = collect($items)->sortBy([['product_id', 'asc'], ['id', 'asc']]);
-            $cogsTotal = '0';
-
-            foreach ($byProduct as $item) {
-                $movement = $this->ledger->issue(
-                    $item->product,
-                    $item->baseQty(),
-                    StockMovementType::Sale,
-                    reference: $sale,
-                    user: $cashier,
-                );
-
-                $cogs = Decimal::round(Decimal::mul((string) $movement->unit_cost, (string) $item->baseQty()));
-                $item->forceFill(['unit_cost' => $movement->unit_cost, 'cogs' => $cogs])->save();
-                $cogsTotal = Decimal::add($cogsTotal, $cogs);
-            }
-
-            $sale->forceFill(['cogs_total' => Decimal::round($cogsTotal)])->save();
+            $cart->writeItems($sale);
+            $this->bookSaleStock($sale, $cashier);
 
             return $sale->load('items');
         });

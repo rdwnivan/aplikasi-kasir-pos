@@ -39,20 +39,28 @@ export function SaleCompleteDialog({ sale, onPrint, onClose }: Props) {
                                 </dd>
                             </div>
                             <div className="flex justify-between">
-                                <dt className="text-muted-foreground">Tunai</dt>
+                                <dt className="text-muted-foreground">
+                                    {sale.method === 'qris' ? 'QRIS' : 'Tunai'}
+                                </dt>
                                 <dd className="tabular-nums">
                                     {formatRupiah(sale.paid)}
                                 </dd>
                             </div>
                         </dl>
-                        <div className="rounded-lg bg-muted p-4 text-center">
-                            <div className="text-sm text-muted-foreground">
-                                Kembalian
+                        {sale.method === 'qris' ? (
+                            <div className="rounded-lg bg-emerald-500/10 p-4 text-center text-sm text-emerald-700 dark:text-emerald-400">
+                                Pembayaran QRIS diterima.
                             </div>
-                            <div className="text-4xl font-bold tracking-tight tabular-nums">
-                                {formatRupiah(sale.change)}
+                        ) : (
+                            <div className="rounded-lg bg-muted p-4 text-center">
+                                <div className="text-sm text-muted-foreground">
+                                    Kembalian
+                                </div>
+                                <div className="text-4xl font-bold tracking-tight tabular-nums">
+                                    {formatRupiah(sale.change)}
+                                </div>
                             </div>
-                        </div>
+                        )}
                         <div className="grid grid-cols-2 gap-2">
                             <Button variant="outline" onClick={onClose}>
                                 Transaksi baru <Kbd>Esc</Kbd>

@@ -5,5 +5,13 @@ namespace App\Enums;
 enum PaymentMethod: string
 {
     case Cash = 'cash';
-    // QRIS (Midtrans) arrives with its webhook flow in milestone 4.
+    case Qris = 'qris';
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::Cash => 'Tunai',
+            self::Qris => 'QRIS',
+        };
+    }
 }

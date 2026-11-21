@@ -9,7 +9,7 @@ import {
     Search,
     Trash2,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { CartPanel } from '@/components/pos/cart-panel';
 import { DiscountDialog } from '@/components/pos/discount-dialog';
@@ -17,6 +17,7 @@ import { HeldSalesDialog } from '@/components/pos/held-sales-dialog';
 import { HoldDialog } from '@/components/pos/hold-dialog';
 import { Kbd } from '@/components/pos/kbd';
 import { PaymentDialog } from '@/components/pos/payment-dialog';
+import { QrisDialog } from '@/components/pos/qris-dialog';
 import { ProductResults } from '@/components/pos/product-results';
 import { SaleCompleteDialog } from '@/components/pos/sale-complete-dialog';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +33,7 @@ import type {
     DiscountType,
     HeldSale,
     LastSale,
+    PendingQris,
     ShiftSummary,
     TaxConfig,
 } from '@/types/pos';
@@ -42,6 +44,8 @@ type Props = {
     heldSales: HeldSale[];
     tax: TaxConfig;
     lastSale: LastSale | null;
+    qrisEnabled: boolean;
+    pendingQris: PendingQris | null;
 };
 
 type Discount = { type: DiscountType | null; value: number };
@@ -62,6 +66,8 @@ export default function PosIndex({
     heldSales,
     tax,
     lastSale,
+    qrisEnabled,
+    pendingQris,
 }: Props) {
     const { auth } = usePage().props;
     const storageKey = `pos-cart-${shift.id}`;
@@ -262,6 +268,27 @@ export default function PosIndex({
             },
         );
     }
+
+    function startQris() {
+        setPayError(undefined);
+        router.post(pos.qris.store.url(), payload(), {
+            preserveScroll: true,
+            onStart: () => setProcessing(true),
+            onFinish: () => setProcessing(false),
+            onSuccess: () => {
+                setDialog(null);
+                // A held cart was turned into the QRIS sale; it no longer exists as held.
+                setHeldId(null);
+                setHeldLabel('');
+            },
+            onError: (errors) => setPayError(firstError(errors)),
+        });
+    }
+
+    const onQrisPaid = useCallback(() => {
+        resetCart();
+        router.reload();
+    }, []);
 
     function holdCart(label: string) {
         router.post(
@@ -650,9 +677,12 @@ export default function PosIndex({
                 total={priced.total}
                 processing={processing}
                 error={payError}
+                qrisEnabled={qrisEnabled}
                 onOpenChange={(open) => !open && setDialog(null)}
                 onPay={submitSale}
+                onQris={startQris}
             />
+            <QrisDialog payment={pendingQris} onPaid={onQrisPaid} />
             <HoldDialog
                 open={dialog === 'hold'}
                 processing={processing}

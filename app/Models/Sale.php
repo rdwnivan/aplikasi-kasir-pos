@@ -33,6 +33,11 @@ use Illuminate\Support\Carbon;
  * @property int|null $change_amount
  * @property string $cogs_total
  * @property Carbon|null $completed_at
+ * @property string|null $payment_reference Midtrans transaction_id for QRIS.
+ * @property string|null $qr_string
+ * @property string|null $qr_url
+ * @property Carbon|null $payment_expires_at
+ * @property Carbon|null $payment_checked_at
  */
 class Sale extends Model
 {
@@ -48,6 +53,8 @@ class Sale extends Model
             'tax_rate' => 'decimal:2',
             'cogs_total' => 'decimal:4',
             'completed_at' => 'datetime',
+            'payment_expires_at' => 'datetime',
+            'payment_checked_at' => 'datetime',
             ...array_fill_keys([
                 'subtotal', 'discount_value', 'discount_amount', 'taxable_amount', 'dpp_amount',
                 'tax_amount', 'total', 'paid_amount', 'change_amount',
