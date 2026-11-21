@@ -44,3 +44,25 @@ export function suggestedPayments(total: number): number[] {
 
     return [...options].sort((a, b) => a - b).slice(0, 5);
 }
+
+/** Compact rupiah for chart axes: 1.250.000 → "1,25 jt", 15.000 → "15 rb". */
+export function formatRupiahShort(amount: number): string {
+    const abs = Math.abs(amount);
+    const sign = amount < 0 ? '-' : '';
+    const fmt = (n: number) =>
+        n.toLocaleString('id-ID', { maximumFractionDigits: 2 });
+
+    if (abs >= 1_000_000_000) {
+        return `${sign}${fmt(abs / 1_000_000_000)} M`;
+    }
+
+    if (abs >= 1_000_000) {
+        return `${sign}${fmt(abs / 1_000_000)} jt`;
+    }
+
+    if (abs >= 1_000) {
+        return `${sign}${fmt(abs / 1_000)} rb`;
+    }
+
+    return `${sign}${abs}`;
+}

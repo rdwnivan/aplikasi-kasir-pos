@@ -27,7 +27,8 @@ beforeEach(function () {
 it('counts low-stock products for the sidebar badge, for staff who restock only', function (Role $role, ?int $expected) {
     $user = User::factory()->create()->assignRole($role->value);
 
-    $this->actingAs($user)->get(route('dashboard'))
+    // Settings pages render for every role, so the shared prop can be checked anywhere.
+    $this->actingAs($user)->get(route('appearance.edit'))
         ->assertInertia(fn (Assert $page) => $page->where('lowStockCount', $expected));
 })->with([
     'owner' => [Role::Owner, 3],
