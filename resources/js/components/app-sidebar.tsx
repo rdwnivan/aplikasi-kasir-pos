@@ -1,7 +1,13 @@
 import { Link } from '@inertiajs/react';
-import { BookOpen, FolderGit2, LayoutGrid, ShoppingCart } from 'lucide-react';
+import {
+    LayoutGrid,
+    Package,
+    Ruler,
+    ShoppingCart,
+    Tags,
+    Truck,
+} from 'lucide-react';
 import AppLogo from '@/components/app-logo';
-import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import {
@@ -13,37 +19,61 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { useRoles } from '@/hooks/use-roles';
 import { dashboard } from '@/routes';
+import categories from '@/routes/categories';
 import pos from '@/routes/pos';
+import products from '@/routes/products';
+import suppliers from '@/routes/suppliers';
+import units from '@/routes/units';
 import type { NavItem } from '@/types';
 
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Dashboard',
-        href: dashboard(),
-        icon: LayoutGrid,
-    },
-    {
-        title: 'Kasir',
-        href: pos.index(),
-        icon: ShoppingCart,
-    },
-];
-
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        href: 'https://github.com/laravel/react-starter-kit',
-        icon: FolderGit2,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#react',
-        icon: BookOpen,
-    },
-];
-
 export function AppSidebar() {
+    const { canSell, canManageStock } = useRoles();
+
+    const groups: { label: string; items: NavItem[] }[] = [
+        {
+            label: 'Utama',
+            items: [
+                { title: 'Dashboard', href: dashboard(), icon: LayoutGrid },
+                ...(canSell
+                    ? [
+                          {
+                              title: 'Kasir',
+                              href: pos.index(),
+                              icon: ShoppingCart,
+                          },
+                      ]
+                    : []),
+            ],
+        },
+        ...(canManageStock
+            ? [
+                  {
+                      label: 'Master data',
+                      items: [
+                          {
+                              title: 'Produk',
+                              href: products.index(),
+                              icon: Package,
+                          },
+                          {
+                              title: 'Kategori',
+                              href: categories.index(),
+                              icon: Tags,
+                          },
+                          { title: 'Satuan', href: units.index(), icon: Ruler },
+                          {
+                              title: 'Supplier',
+                              href: suppliers.index(),
+                              icon: Truck,
+                          },
+                      ],
+                  },
+              ]
+            : []),
+    ];
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -59,11 +89,16 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} />
+                {groups.map((group) => (
+                    <NavMain
+                        key={group.label}
+                        label={group.label}
+                        items={group.items}
+                    />
+                ))}
             </SidebarContent>
 
             <SidebarFooter>
-                <NavFooter items={footerNavItems} className="mt-auto" />
                 <NavUser />
             </SidebarFooter>
         </Sidebar>
