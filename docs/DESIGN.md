@@ -5,16 +5,16 @@ Tujuan: project portofolio GitHub untuk posisi **fullstack web developer**, deng
 
 ## 1. Ringkasan keputusan
 
-| Area | Keputusan |
-|---|---|
-| Target | Fullstack web developer |
-| Stack | Laravel (terbaru) + Inertia.js + React + TypeScript, PostgreSQL |
-| Platform | Web app responsif (desktop kasir & tablet) |
-| Skala | 1 toko, banyak kasir. Skema siap dikembangkan ke multi-cabang (v2) |
-| Timeline | 4–6 minggu, MVP bisa didemokan di minggu ke-3 |
-| Bahasa UI | Bahasa Indonesia |
-| README | Inggris (utama) + ringkasan Bahasa Indonesia |
-| Offline | Tidak di v1 (roadmap: PWA + antrean sinkronisasi) |
+| Area      | Keputusan                                                          |
+| --------- | ------------------------------------------------------------------ |
+| Target    | Fullstack web developer                                            |
+| Stack     | Laravel (terbaru) + Inertia.js + React + TypeScript, PostgreSQL    |
+| Platform  | Web app responsif (desktop kasir & tablet)                         |
+| Skala     | 1 toko, banyak kasir. Skema siap dikembangkan ke multi-cabang (v2) |
+| Timeline  | 4–6 minggu, MVP bisa didemokan di minggu ke-3                      |
+| Bahasa UI | Bahasa Indonesia                                                   |
+| README    | Inggris (utama) + ringkasan Bahasa Indonesia                       |
+| Offline   | Tidak di v1 (roadmap: PWA + antrean sinkronisasi)                  |
 
 ## 2. Standar lokal Indonesia
 
@@ -28,11 +28,11 @@ Tujuan: project portofolio GitHub untuk posisi **fullstack web developer**, deng
 
 ## 3. Role
 
-| Role | Akses |
-|---|---|
-| Owner | Semua: laporan, pengaturan, user, produk, stok, kasir |
-| Staf Gudang | Produk, supplier, penerimaan barang, stok opname, lihat stok |
-| Kasir | Layar kasir, shift sendiri, riwayat transaksi shift sendiri, retur (butuh PIN owner) |
+| Role        | Akses                                                                                |
+| ----------- | ------------------------------------------------------------------------------------ |
+| Owner       | Semua: laporan, pengaturan, user, produk, stok, kasir                                |
+| Staf Gudang | Produk, supplier, penerimaan barang, stok opname, lihat stok                         |
+| Kasir       | Layar kasir, shift sendiri, riwayat transaksi shift sendiri, retur (butuh PIN owner) |
 
 Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permission).
 
@@ -52,12 +52,14 @@ Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permi
 ## 5. Cakupan v1
 
 ### Stok / pembelian
+
 - Master supplier
 - Penerimaan barang langsung (tanpa PO)
 - Stok opname (input hitungan fisik → selisih otomatis jadi movement `opname`)
 - Peringatan stok minimum
 
 ### Kasir
+
 - Cari produk / scan barcode, pilih satuan
 - Diskon per item & per transaksi (nominal atau persen)
 - Tahan transaksi (hold) & lanjutkan
@@ -68,6 +70,7 @@ Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permi
 - Cetak struk 58/80mm
 
 ### Laporan
+
 - Penjualan harian / bulanan + grafik dashboard
 - Laba kotor (penjualan − HPP)
 - Produk terlaris
@@ -76,6 +79,7 @@ Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permi
 - Ekspor Excel
 
 ## 6. Di luar v1 (roadmap)
+
 - Purchase Order + penerimaan parsial
 - Batch & tanggal kedaluwarsa
 - Pembayaran campuran (split payment)
@@ -86,6 +90,7 @@ Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permi
 - Ekspor PDF
 
 ## 7. Kualitas & demo
+
 - Tes Pest, fokus ke buku besar stok, HPP, transaksi kasir, retur, webhook QRIS
 - GitHub Actions: Pint (lint) + Pest + build frontend
 - Docker (Laravel Sail) untuk `up` sekali jalan
@@ -94,11 +99,11 @@ Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permi
 
 ## 8. Milestone
 
-| Minggu | Target |
-|---|---|
-| 1 | Scaffold, auth & role, skema DB, master produk/satuan/supplier, service buku besar stok + tes |
-| 2 | Penerimaan barang, stok opname, layar kasir (tunai), shift |
-| 3 | Struk, hold, diskon, retur → **MVP demo** |
-| 4 | QRIS Midtrans + webhook, laporan & dashboard |
-| 5 | Ekspor Excel, polish UI, seeder, CI, Docker |
-| 6 | Deploy demo, README + screenshot/GIF, buffer |
+| Minggu | Target                                                                                        |
+| ------ | --------------------------------------------------------------------------------------------- |
+| 1      | Scaffold, auth & role, skema DB, master produk/satuan/supplier, service buku besar stok + tes |
+| 2      | Penerimaan barang, stok opname, layar kasir (tunai), shift                                    |
+| 3      | Struk, hold, diskon, retur → **MVP demo**                                                     |
+| 4      | QRIS Midtrans + webhook, laporan & dashboard                                                  |
+| 5      | Ekspor Excel, polish UI, seeder, CI, Docker                                                   |
+| 6      | Deploy demo, README + screenshot/GIF, buffer                                                  |

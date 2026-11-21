@@ -13,6 +13,7 @@ void createInertiaApp({
     layout: (name) => {
         switch (true) {
             case name === 'welcome':
+            case name === 'pos/index': // full-screen till, no app shell
                 return null;
             case name.startsWith('auth/'):
                 return AuthLayout;

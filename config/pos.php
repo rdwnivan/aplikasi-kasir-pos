@@ -7,6 +7,15 @@
 */
 
 return [
+    // Printed on receipts.
+    'store' => [
+        'name' => env('POS_STORE_NAME', 'Toko Sumber Berkah'),
+        'address' => env('POS_STORE_ADDRESS', 'Jl. Merdeka No. 45, Bandung'),
+        'phone' => env('POS_STORE_PHONE', '022-1234567'),
+        'npwp' => env('POS_STORE_NPWP'),
+        'receipt_footer' => env('POS_RECEIPT_FOOTER', 'Terima kasih, selamat belanja kembali!'),
+    ],
+
     'tax' => [
         // Set false for a non-PKP business (no PPN on receipts).
         'enabled' => (bool) env('POS_TAX_ENABLED', true),
