@@ -1,0 +1,66 @@
+# Laravel Sail: the app (PHP 8.5, Node 24) and PostgreSQL 17.
+#
+#   ./vendor/bin/sail up -d
+#   ./vendor/bin/sail artisan migrate --seed
+#
+# First boot creates .env from .env.example, generates APP_KEY and builds the frontend
+# (docker/sail-start.sh), so the two commands above are enough. See README → Docker.
+services:
+    laravel.test:
+        build:
+            context: ./vendor/laravel/sail/runtimes/8.5
+            dockerfile: Dockerfile
+            args:
+                WWWGROUP: '${WWWGROUP:-1000}'
+        image: sail-8.5/app
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
+        ports:
+            - '${APP_PORT:-80}:80'
+            - '${VITE_PORT:-5173}:${VITE_PORT:-5173}'
+        environment:
+            WWWUSER: '${WWWUSER:-1000}'
+            LARAVEL_SAIL: 1
+            XDEBUG_MODE: '${SAIL_XDEBUG_MODE:-off}'
+            XDEBUG_CONFIG: '${SAIL_XDEBUG_CONFIG:-client_host=host.docker.internal}'
+            IGNITION_LOCAL_SITES_PATH: '${PWD}'
+            SUPERVISOR_PHP_COMMAND: 'bash /var/www/html/docker/sail-start.sh'
+            # The database lives in the pgsql service, whatever .env says about the host.
+            DB_CONNECTION: pgsql
+            DB_HOST: pgsql
+            DB_PORT: 5432
+            DB_DATABASE: '${DB_DATABASE:-kasir_pos}'
+            DB_USERNAME: '${DB_USERNAME:-postgres}'
+            DB_PASSWORD: '${DB_PASSWORD:-secret}'
+        volumes:
+            - '.:/var/www/html'
+        networks:
+            - sail
+        depends_on:
+            pgsql:
+                condition: service_healthy
+    pgsql:
+        image: 'postgres:17-alpine'
+        ports:
+            - '${FORWARD_DB_PORT:-5432}:5432'
+        environment:
+            PGPASSWORD: '${DB_PASSWORD:-secret}'
+            POSTGRES_DB: '${DB_DATABASE:-kasir_pos}'
+            POSTGRES_USER: '${DB_USERNAME:-postgres}'
+            POSTGRES_PASSWORD: '${DB_PASSWORD:-secret}'
+        volumes:
+            - 'sail-pgsql:/var/lib/postgresql/data'
+            - './vendor/laravel/sail/database/pgsql/create-testing-database.sql:/docker-entrypoint-initdb.d/10-create-testing-database.sql'
+        networks:
+            - sail
+        healthcheck:
+            test: ['CMD', 'pg_isready', '-q', '-d', '${DB_DATABASE:-kasir_pos}', '-U', '${DB_USERNAME:-postgres}']
+            interval: 5s
+            retries: 10
+            timeout: 5s
+networks:
+    sail:
+        driver: bridge
+volumes:
+    sail-pgsql:
+        driver: local
