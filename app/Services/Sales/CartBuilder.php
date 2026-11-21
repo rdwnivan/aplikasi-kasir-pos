@@ -36,7 +36,7 @@ final class CartBuilder
         $errors = [];
 
         foreach ($input as $i => $row) {
-            $unit = $found->get($row['product_unit_id'] ?? 0);
+            $unit = $found->get($row['product_unit_id']);
 
             if ($unit === null || $unit->product === null || ! $unit->product->is_active) {
                 $errors["items.$i.product_unit_id"] = 'Produk tidak ditemukan atau tidak aktif.';
@@ -47,7 +47,7 @@ final class CartBuilder
             $units[] = $unit;
             $lines[] = new CartLine(
                 unitPrice: $unit->price,
-                qty: (int) ($row['qty'] ?? 0),
+                qty: $row['qty'],
                 discountType: isset($row['discount_type']) ? DiscountType::from($row['discount_type']) : null,
                 discountValue: (int) ($row['discount_value'] ?? 0),
             );

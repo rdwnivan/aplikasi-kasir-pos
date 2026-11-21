@@ -43,7 +43,7 @@ final class StockLedger
         if (! $type->revaluesAverage()) {
             throw new InvalidArgumentException("Movement type [{$type->value}] cannot carry its own cost.");
         }
-        if (bccomp($unitCost, '0', Decimal::SCALE) < 0) {
+        if (Decimal::compare($unitCost, '0') < 0) {
             throw new InvalidArgumentException('Unit cost cannot be negative.');
         }
 

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Database\Factories\ProductFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -28,6 +29,7 @@ use Illuminate\Support\Carbon;
 #[Fillable(['category_id', 'base_unit_id', 'sku', 'name', 'min_stock', 'is_active'])]
 class Product extends Model
 {
+    /** @use HasFactory<ProductFactory> */
     use HasFactory, SoftDeletes;
 
     protected function casts(): array

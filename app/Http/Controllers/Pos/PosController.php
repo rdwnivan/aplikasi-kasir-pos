@@ -67,11 +67,11 @@ class PosController extends Controller
      */
     private static function catalog(): array
     {
-        return ProductUnit::query()
+        return array_values(ProductUnit::query()
             ->with(['product.category', 'unit'])
             ->whereHas('product', fn ($q) => $q->where('is_active', true))
             ->get()
-            ->sortBy([fn ($a, $b) => [$a->product->name, $a->conversion] <=> [$b->product->name, $b->conversion]])
+            ->sort(fn (ProductUnit $a, ProductUnit $b) => [$a->product->name, $a->conversion] <=> [$b->product->name, $b->conversion])
             ->map(fn (ProductUnit $u) => [
                 'id' => $u->id,
                 'productId' => $u->product_id,
@@ -84,14 +84,13 @@ class PosController extends Controller
                 'barcode' => $u->barcode,
                 'stock' => $u->product->stock_on_hand,
             ])
-            ->values()
-            ->all();
+            ->all());
     }
 
     /** @return list<array<string, mixed>> */
     private static function heldSales(Shift $shift): array
     {
-        return $shift->sales()
+        return array_values($shift->sales()
             ->where('status', SaleStatus::Held)
             ->with('items')
             ->latest()
@@ -110,14 +109,14 @@ class PosController extends Controller
                     'discountValue' => $item->discount_value ?? 0,
                 ])->all(),
             ])
-            ->all();
+            ->all());
     }
 
     /** @return array<string, mixed>|null */
     private static function lastSale(Request $request): ?array
     {
         $id = $request->session()->get('last_sale_id');
-        $sale = $id ? Sale::query()->where('user_id', $request->user()->id)->find($id) : null;
+        $sale = is_numeric($id) ? Sale::query()->where('user_id', $request->user()->id)->find((int) $id) : null;
 
         return $sale === null ? null : [
             'id' => $sale->id,

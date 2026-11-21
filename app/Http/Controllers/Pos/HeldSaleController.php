@@ -17,7 +17,7 @@ class HeldSaleController extends Controller
     public function store(HoldSaleRequest $request, HoldSale $hold): RedirectResponse
     {
         $replacing = $request->validated('held_sale_id')
-            ? Sale::query()->where('status', SaleStatus::Held)->find($request->validated('held_sale_id'))
+            ? Sale::query()->where('status', SaleStatus::Held)->find((int) $request->validated('held_sale_id'))
             : null;
 
         $hold->handle(

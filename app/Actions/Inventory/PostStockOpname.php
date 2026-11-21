@@ -37,7 +37,7 @@ final class PostStockOpname
                     user: $user,
                 );
 
-                $difference = $movement?->qty ?? 0;
+                $difference = $movement === null ? 0 : $movement->qty;
 
                 $item->forceFill([
                     'system_qty' => $item->counted_qty - $difference,

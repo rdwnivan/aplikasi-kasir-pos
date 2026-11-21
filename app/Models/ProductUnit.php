@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Database\Factories\ProductUnitFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -20,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable(['product_id', 'unit_id', 'conversion', 'barcode', 'price'])]
 class ProductUnit extends Model
 {
+    /** @use HasFactory<ProductUnitFactory> */
     use HasFactory;
 
     protected function casts(): array

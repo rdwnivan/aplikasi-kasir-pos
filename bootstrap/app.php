@@ -29,7 +29,10 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // Inertia visits are XHRs too, but they need the usual redirect-back with session
+        // errors, not a JSON 422; otherwise forms and toasts get raw arrays.
         $exceptions->shouldRenderJsonWhen(
-            fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
+            fn (Request $request) => $request->is('api/*')
+                || ($request->expectsJson() && ! $request->hasHeader('X-Inertia')),
         );
     })->create();

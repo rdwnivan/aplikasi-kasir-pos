@@ -23,7 +23,11 @@ class DemoUserSeeder extends Seeder
         foreach (self::ACCOUNTS as $account) {
             $user = User::query()->firstOrCreate(
                 ['email' => $account['email']],
-                User::factory()->raw(['name' => $account['name'], 'email' => $account['email']]),
+                [
+                    'name' => $account['name'],
+                    'password' => 'password',
+                    'email_verified_at' => now(),
+                ],
             );
 
             $user->syncRoles([$account['role']->value]);

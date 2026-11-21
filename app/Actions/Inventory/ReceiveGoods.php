@@ -105,17 +105,17 @@ final class ReceiveGoods
         $errors = [];
 
         foreach ($items as $i => $line) {
-            if (($line['qty'] ?? 0) <= 0) {
+            if ($line['qty'] <= 0) {
                 $errors["items.$i.qty"] = 'Jumlah harus lebih dari 0.';
             }
-            if (($line['unit_price'] ?? -1) < 0) {
+            if ($line['unit_price'] < 0) {
                 $errors["items.$i.unit_price"] = 'Harga beli tidak boleh negatif.';
             }
 
             $unit = ProductUnit::query()
                 ->with('product')
-                ->where('product_id', $line['product_id'] ?? null)
-                ->where('unit_id', $line['unit_id'] ?? null)
+                ->where('product_id', $line['product_id'])
+                ->where('unit_id', $line['unit_id'])
                 ->first();
 
             if ($unit === null || ! $unit->product instanceof Product || ! $unit->product->is_active) {
