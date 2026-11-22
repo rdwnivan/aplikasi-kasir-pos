@@ -105,14 +105,17 @@ Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permi
 | 2      | Penerimaan barang, stok opname, layar kasir (tunai), shift                                    | ✅ Selesai                                                        |
 | 3      | Struk, hold, diskon, retur → **MVP demo**                                                     | ✅ Selesai                                                        |
 | 4      | QRIS Midtrans + webhook, laporan & dashboard                                                  | ✅ Selesai (QRIS belum dicoba ke sandbox asli)                    |
-| 5      | Ekspor Excel, polish UI, seeder, CI, Docker                                                   | ✅ Selesai (CI & `sail up` belum pernah dijalankan)               |
+| 5      | Ekspor Excel, polish UI, seeder, CI, Docker                                                   | ✅ Selesai (CI hijau; `sail up` belum pernah dijalankan)          |
 | 6      | Deploy demo, README + screenshot/GIF, buffer                                                  | 🟡 README + screenshot selesai; animasi berupa APNG; deploy belum |
+
+### Terverifikasi
+
+- **GitHub Actions** (2026-11-22). Run pertama `tests` di `main` (commit `df90872`) hijau di semua job: lint/types/build, Pest SQLite (221 lulus, 3 dilewati — tes `tests/Concurrency` yang hanya jalan di PostgreSQL), dan Pest PostgreSQL 17 (224 lulus, termasuk `tests/Concurrency`, tanpa yang dilewati). Run: <https://github.com/rdwnivan/aplikasi-kasir-pos/actions/runs/45014828946>.
 
 ### Belum terverifikasi
 
 - **QRIS ke Midtrans Sandbox asli.** Alur QRIS hanya diuji dengan respons Midtrans tiruan (HTTP fake) di Pest; belum pernah membuat QR sungguhan, membayar lewat simulator sandbox, atau menerima webhook dari Midtrans.
 - **`sail up`.** `compose.yaml` dan `docker/sail-start.sh` sudah ditulis, tetapi container belum pernah dijalankan.
-- **GitHub Actions.** Workflow `.github/workflows/tests.yml` sudah ada, tetapi repo belum di-push sehingga belum pernah jalan di runner GitHub. Perintah yang sama sudah lulus secara lokal (SQLite dan PostgreSQL).
 
 ## 9. Keputusan implementasi (2026-11-22)
 
