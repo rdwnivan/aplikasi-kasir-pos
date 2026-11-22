@@ -3,17 +3,41 @@
 A point-of-sale and inventory web app for a single Indonesian shop (warung / minimarket), built as a full-stack portfolio project.
 **Stack:** Laravel 13 · Inertia 3 · React 19 · TypeScript · Tailwind 4 · shadcn/ui · PostgreSQL 17 · Pest.
 
-![Cashier screen](docs/screenshots/kasir.jpg)
+![Cash checkout: scan, pay, change](docs/screenshots/checkout.png)
+
+_Cash checkout from scan to change (animated PNG). All screenshots use the 30-day demo data from `DemoSalesSeeder`._
 
 ## Features
 
-- **Till (kasir):** barcode scan, pcs / pack / carton units, item and cart discounts, held carts, keyboard shortcuts (F2 search, F4 hold, F8 held, F9 pay), cash with change, **QRIS via Midtrans**, 58/80 mm thermal receipts printed from the browser, reprints marked _SALINAN_.
+- **Till (kasir):** barcode scan, pcs / pack / carton units, item and cart discounts, held carts, keyboard shortcuts (F2 search, F4 hold, F8 held, F9 pay), cash with change, **QRIS via Midtrans**, 58/80 mm thermal receipts printed from the browser, reprints marked _SALINAN_. Works down to phone width.
+
+  <p><img src="docs/screenshots/kasir.jpg" alt="Cashier screen with a filled cart" width="74%"> <img src="docs/screenshots/kasir-mobile.jpg" alt="Cashier screen at 375 px" width="22%"></p>
+
 - **Shifts:** opening float, expected vs counted cash at close; refunds come out of the running drawer.
 - **Returns:** limited to what was sold minus earlier returns, approved with an **owner PIN**, refund = what the customer actually paid (transaction discount and PPN apportioned to the rupiah).
+
+  <img src="docs/screenshots/detail-retur.jpg" alt="Transaction detail with a processed return" width="70%">
+
 - **Inventory:** products with tiered units, categories, units, suppliers, goods receipts, stock opname (draft → post), stock card per product, low-stock badge.
+
+  <p><img src="docs/screenshots/penerimaan-barang.jpg" alt="Goods receipt form" width="49%"> <img src="docs/screenshots/kartu-stok.jpg" alt="Stock card for one product" width="49%"></p>
+
 - **Owner reports:** sales and gross profit per day/month, best sellers, inventory value, per-cashier/shift recap, **Excel export**; dashboard with charts.
+
+  <p><img src="docs/screenshots/dashboard.jpg" alt="Owner dashboard" width="49%"> <img src="docs/screenshots/laporan-penjualan.jpg" alt="Sales and gross profit report" width="49%"></p>
+
 - **Indonesian rules:** PPN 12% on DPP 11/12 (effective 11%), prices incl. or excl. tax, Rupiah formatting, Asia/Jakarta calendar days.
 - Roles: **owner**, **gudang** (warehouse), **kasir** (cashier).
+
+### Gallery
+
+| Till                                                                                              | Till, 375 px                                                                                       | Owner dashboard                                                                   |
+| ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| [![Till](docs/screenshots/kasir.jpg)](docs/screenshots/kasir.jpg)                                 | [![Till on a phone](docs/screenshots/kasir-mobile.jpg)](docs/screenshots/kasir-mobile.jpg)         | [![Dashboard](docs/screenshots/dashboard.jpg)](docs/screenshots/dashboard.jpg)    |
+| **Sales & gross profit**                                                                          | **Best sellers**                                                                                   | **Stock card**                                                                    |
+| [![Sales report](docs/screenshots/laporan-penjualan.jpg)](docs/screenshots/laporan-penjualan.jpg) | [![Best sellers](docs/screenshots/produk-terlaris.jpg)](docs/screenshots/produk-terlaris.jpg)      | [![Stock card](docs/screenshots/kartu-stok.jpg)](docs/screenshots/kartu-stok.jpg) |
+| **Sale with a return**                                                                            | **Goods receipt**                                                                                  |                                                                                   |
+| [![Return](docs/screenshots/detail-retur.jpg)](docs/screenshots/detail-retur.jpg)                 | [![Goods receipt](docs/screenshots/penerimaan-barang.jpg)](docs/screenshots/penerimaan-barang.jpg) |                                                                                   |
 
 ## Stock architecture
 
