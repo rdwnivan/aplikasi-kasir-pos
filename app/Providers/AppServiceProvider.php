@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
@@ -33,6 +34,11 @@ class AppServiceProvider extends ServiceProvider
     protected function configureDefaults(): void
     {
         Date::use(CarbonImmutable::class);
+
+        $proxies = config('app.trusted_proxies');
+        if (is_string($proxies) && $proxies !== '') {
+            TrustProxies::at($proxies === '*' ? '*' : array_map(trim(...), explode(',', $proxies)));
+        }
 
         // Indonesian URLs for resource pages: /produk/baru, /produk/{id}/ubah.
         Route::resourceVerbs(['create' => 'baru', 'edit' => 'ubah']);

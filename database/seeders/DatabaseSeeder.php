@@ -15,13 +15,13 @@ class DatabaseSeeder extends Seeder
             DemoUserSeeder::class,
         ]);
 
-        if (! app()->environment('local')) {
+        if (! app()->environment('local') && ! config('pos.demo_sales_history')) {
             $this->call(CatalogSeeder::class);
 
             return;
         }
 
-        // Local demo: open the shop a month ago so the dashboard and reports have history,
+        // Local or demo deploy (pos.demo_sales_history): open the shop a month ago so the dashboard and reports have history,
         // and the stock card reads in date order (opening stock first, then the sales).
         $now = CarbonImmutable::now();
         Carbon::setTestNow($now->subDays(31)->setTime(7, 0));

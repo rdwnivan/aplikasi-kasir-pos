@@ -71,7 +71,17 @@ First boot creates `.env`, the app key and the frontend build (`docker/sail-star
 
 ### QRIS (Midtrans sandbox)
 
-Put your sandbox keys in `.env`: `MIDTRANS_SERVER_KEY`, `MIDTRANS_CLIENT_KEY`, `MIDTRANS_IS_PRODUCTION=false`. The notification URL is `POST /webhooks/midtrans`; without a public URL the till still learns about payments by polling Midtrans.
+Put your sandbox server key in `.env`: `MIDTRANS_SERVER_KEY` (on the current Midtrans dashboard, an API key with Core API → Write and Cancel transaction → Write), `MIDTRANS_IS_PRODUCTION=false`. The client key is not used. The notification URL is `POST /webhooks/midtrans`; without a public URL the till still learns about payments by polling Midtrans.
+
+### Deploy (Render + Neon, free tiers)
+
+The repo ships a production `Dockerfile` (FrankenPHP, PHP 8.5) and a Render Blueprint (`render.yaml`): one free web service in Singapore, with the database on [Neon](https://neon.tech) (free PostgreSQL that doesn't expire).
+
+1. **Neon:** create a project in the Singapore region and copy the **direct** connection string (connection pooling off).
+2. **App key:** run `php artisan key:generate --show` locally and copy the `base64:…` value.
+3. **Render:** New → Blueprint → pick this repo. Fill in `APP_KEY`, `DB_URL` (the Neon string) and optionally `MIDTRANS_SERVER_KEY`.
+
+Each boot runs migrations; with `DEMO_SEED=true` it also seeds the demo accounts, catalogue and (with `POS_DEMO_SALES_HISTORY=true`) 30 days of sales in the background. For Midtrans, set the payment notification URL to `https://<your-app>.onrender.com/webhooks/midtrans`. Free instances sleep after 15 minutes idle, so the first request after that takes a while.
 
 ## Demo accounts
 

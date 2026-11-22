@@ -3,6 +3,7 @@
 use App\Enums\Role;
 use App\Models\GoodsReceipt;
 use App\Models\Product;
+use App\Models\Sale;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoUserSeeder;
@@ -24,6 +25,18 @@ it('seeds demo accounts with roles and an opening stock that matches the ledger'
         ->stock_on_hand->toBe(200)
         ->avg_cost->toBe('2475.0000');
 
+    $this->artisan('stock:rebuild')->assertSuccessful();
+});
+
+it('seeds sales history outside local only when pos.demo_sales_history is on', function () {
+    $this->seed(DatabaseSeeder::class);
+    expect(Sale::query()->exists())->toBeFalse();
+
+    config(['pos.demo_sales_history' => true]);
+    $this->seed(DatabaseSeeder::class);
+
+    expect(Sale::query()->count())->toBeGreaterThan(300)
+        ->and(GoodsReceipt::count())->toBeGreaterThan(1);
     $this->artisan('stock:rebuild')->assertSuccessful();
 });
 

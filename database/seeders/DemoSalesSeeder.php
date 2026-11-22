@@ -26,7 +26,7 @@ use Illuminate\Support\Collection;
  * buy prices, so the moving-average HPP moves), and the odd return. Everything goes through
  * the real actions, so the ledger, HPP and drawer figures are all consistent.
  *
- * Runs only in the local environment (see DatabaseSeeder) and only on a database without
+ * Runs only in the local environment or with pos.demo_sales_history (see DatabaseSeeder), and only on a database without
  * sales. Deterministic: the same seed gives the same history.
  */
 class DemoSalesSeeder extends Seeder

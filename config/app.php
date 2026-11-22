@@ -54,6 +54,10 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    // Proxies whose X-Forwarded-* headers are trusted (so URLs come out as https behind a
+    // TLS-terminating proxy such as Render's): "*" or a comma-separated list of IPs.
+    'trusted_proxies' => env('TRUSTED_PROXIES'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

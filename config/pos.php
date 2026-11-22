@@ -29,4 +29,8 @@ return [
         // Shelf prices already include PPN (normal for Indonesian retail).
         'prices_include_tax' => (bool) env('POS_PRICES_INCLUDE_TAX', true),
     ],
+
+    // Seed 30 days of sales history (DemoSalesSeeder) outside the local environment too,
+    // for a public demo deploy. Local always gets it.
+    'demo_sales_history' => (bool) env('POS_DEMO_SALES_HISTORY', false),
 ];
