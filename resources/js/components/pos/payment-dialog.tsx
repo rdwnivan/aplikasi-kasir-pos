@@ -164,7 +164,7 @@ function CashForm({ total, processing, error, onPay }: Props) {
                     {paid > 0 && !enough ? 'Kurang' : 'Kembalian'}
                 </span>
                 <span className="text-2xl font-semibold tabular-nums">
-                    {formatRupiah(Math.abs(paid - total))}
+                    {formatRupiah(paid === 0 ? 0 : Math.abs(paid - total))}
                 </span>
             </div>
 
