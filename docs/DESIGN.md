@@ -92,18 +92,77 @@ Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permi
 ## 7. Kualitas & demo
 
 - Tes Pest, fokus ke buku besar stok, HPP, transaksi kasir, retur, webhook QRIS
-- GitHub Actions: Pint (lint) + Pest + build frontend
+- GitHub Actions: Pint, PHPStan, build frontend, `tsc`, `vp check`, lalu Pest di SQLite **dan** PostgreSQL 17 (lihat §9)
 - Docker (Laravel Sail) untuk `up` sekali jalan
 - Seeder data realistis (Indomie, Aqua, Teh Botol, Beras 5kg, dll.) + akun demo per role
 - Demo live (hosting ditentukan kemudian)
 
 ## 8. Milestone
 
-| Minggu | Target                                                                                        |
-| ------ | --------------------------------------------------------------------------------------------- |
-| 1      | Scaffold, auth & role, skema DB, master produk/satuan/supplier, service buku besar stok + tes |
-| 2      | Penerimaan barang, stok opname, layar kasir (tunai), shift                                    |
-| 3      | Struk, hold, diskon, retur → **MVP demo**                                                     |
-| 4      | QRIS Midtrans + webhook, laporan & dashboard                                                  |
-| 5      | Ekspor Excel, polish UI, seeder, CI, Docker                                                   |
-| 6      | Deploy demo, README + screenshot/GIF, buffer                                                  |
+| Minggu | Target                                                                                        | Status                                                            |
+| ------ | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 1      | Scaffold, auth & role, skema DB, master produk/satuan/supplier, service buku besar stok + tes | ✅ Selesai                                                        |
+| 2      | Penerimaan barang, stok opname, layar kasir (tunai), shift                                    | ✅ Selesai                                                        |
+| 3      | Struk, hold, diskon, retur → **MVP demo**                                                     | ✅ Selesai                                                        |
+| 4      | QRIS Midtrans + webhook, laporan & dashboard                                                  | ✅ Selesai (QRIS belum dicoba ke sandbox asli)                    |
+| 5      | Ekspor Excel, polish UI, seeder, CI, Docker                                                   | ✅ Selesai (CI & `sail up` belum pernah dijalankan)               |
+| 6      | Deploy demo, README + screenshot/GIF, buffer                                                  | 🟡 README + screenshot selesai; animasi berupa APNG; deploy belum |
+
+### Belum terverifikasi
+
+- **QRIS ke Midtrans Sandbox asli.** Alur QRIS hanya diuji dengan respons Midtrans tiruan (HTTP fake) di Pest; belum pernah membuat QR sungguhan, membayar lewat simulator sandbox, atau menerima webhook dari Midtrans.
+- **`sail up`.** `compose.yaml` dan `docker/sail-start.sh` sudah ditulis, tetapi container belum pernah dijalankan.
+- **GitHub Actions.** Workflow `.github/workflows/tests.yml` sudah ada, tetapi repo belum di-push sehingga belum pernah jalan di runner GitHub. Perintah yang sama sudah lulus secara lokal (SQLite dan PostgreSQL).
+
+### Isu terbuka
+
+- Laporan **produk terlaris** menghitung laba sebagai `line_total − HPP`: masih termasuk PPN, sebelum diskon transaksi, dan omzet tidak dikurangi retur. Akibatnya tidak konsisten dengan laba kotor di laporan penjualan (§9.1).
+- Harga beli di `CatalogSeeder` hampir sama dengan harga jual tanpa PPN untuk satuan besar (dus/karung), sehingga data demo menunjukkan margin kotor sekitar 0,3%. Ini masalah data demo, bukan perhitungan.
+
+## 9. Keputusan implementasi (2026-11-22)
+
+### 9.1 Laba kotor
+
+- Laba kotor = **penjualan bersih tanpa PPN** − HPP. PPN dipungut untuk negara, jadi bukan pendapatan toko.
+- Penjualan bersih = (total penjualan − PPN penjualan) − (refund − PPN refund). HPP = HPP barang terjual − HPP barang yang diretur (memakai HPP baris aslinya).
+- Implementasi: `app/Reports/SalesSummary.php`, dipakai juga oleh dashboard.
+
+### 9.2 Retur
+
+- Nilai refund = yang benar-benar dibayar pelanggan. Total transaksi (setelah diskon transaksi dan PPN) dibagi ke tiap baris **secara proporsional** terhadap `line_total`, dalam rupiah bulat. Sisa pembulatan dibagikan per Rp 1 ke baris dengan sisa pecahan terbesar (_largest remainder_), sehingga jumlah bagian selalu tepat sama dengan total.
+- Di dalam satu baris, retur sebagian dihitung pro rata; retur unit terakhir sebuah baris mengembalikan seluruh sisa bagian baris itu. Jadi meretur semua barang selalu mengembalikan total transaksi tepat sampai rupiah.
+- Barang masuk lagi ke buku besar sebagai `sale_return` dengan HPP baris aslinya.
+- Persetujuan dengan **PIN owner** (4–6 angka) yang disimpan sebagai hash (`users.pin_hash`). PIN salah dibatasi **5 kali per 5 menit** per pengguna yang meminta (`App\Services\Auth\OwnerPin`).
+- Uang refund keluar dari **laci shift yang sedang berjalan** milik pengguna yang memproses retur, jadi shift harus terbuka dan rekap kas saat tutup shift sudah memperhitungkannya.
+- Satu retur per transaksi diproses bergantian (row lock pada `sales`), sehingga dua terminal tidak bisa sama-sama meretur unit terakhir.
+
+### 9.3 QRIS (Midtrans Core API)
+
+- Status transaksi: `pending_payment` → `completed` (settlement) atau `cancelled` (expire / cancel / deny / failure). Transaksi `cancelled` yang ternyata dibayar di detik terakhir tetap menjadi `completed`, karena uangnya nyata.
+- **Stok baru keluar saat settlement**, tepat sekali. Selama `pending_payment` stok tidak dipesan.
+- Webhook `POST /webhooks/midtrans` memverifikasi `signature_key` = SHA512(`order_id` + `status_code` + `gross_amount` + server key) dengan `hash_equals`, dan **idempotent**: transaksi dikunci dengan `SELECT … FOR UPDATE`, lalu notifikasi yang tidak mengubah status diabaikan.
+- Layar kasir juga **polling status ke Midtrans setiap 3 detik**, sehingga pembayaran tetap terdeteksi walau webhook tidak sampai (mis. server lokal tanpa URL publik).
+- State machine ada di `app/Actions/Sales/QrisPayments.php`; pembuatan QR di `StartQrisPayment`.
+
+### 9.4 Ekspor Excel
+
+- Memakai **OpenSpout** (`openspout/openspout`) untuk menulis `.xlsx` secara streaming: memori tetap kecil walau barisnya banyak, dan jauh lebih ringan daripada PhpSpreadsheet (cukup ekstensi standar seperti `zip` dan `xmlreader`). Builder kecil ada di `app/Exports/Spreadsheet.php`.
+- **Bukan CSV**, karena kolom rupiah dan jumlah perlu format angka asli agar bisa dijumlahkan dan dibuat grafik di Excel. Selain itu, Excel dengan locale Indonesia memakai `;` sebagai pemisah daftar dan `,` sebagai desimal, sehingga CSV berpemisah koma terbaca salah.
+
+### 9.5 Grafik dashboard
+
+- Grafik batang dibuat dengan **SVG sendiri** (`resources/js/components/charts/daily-bar-chart.tsx`), tanpa library grafik. Kebutuhannya hanya batang harian (termasuk nilai negatif untuk laba) dengan tooltip dan tabel aksesibel, jadi library seperti Recharts tidak sebanding dengan ukuran bundle-nya.
+
+### 9.6 Platform & data demo
+
+- **PHP minimal 8.4** (`composer.json`: `^8.4`); pengembangan dan Sail memakai PHP 8.5.
+- `DemoSalesSeeder` (30 hari penjualan, restok, retur, QRIS yang sudah lunas) **hanya jalan saat `APP_ENV=local`**, supaya `migrate --seed` di produksi tidak mengisi transaksi palsu. Semua data dibuat lewat Action yang sama dengan aplikasi, jadi buku besar tetap konsisten.
+
+### 9.7 CI
+
+- GitHub Actions menjalankan Pest dalam matriks **SQLite (in memory) dan PostgreSQL 17**.
+- Tes di `tests/Concurrency` hanya jalan di PostgreSQL: dua koneksi database (proses PHP kedua) berebut unit terakhir untuk membuktikan `lockForUpdate()` mencegah oversell. Di SQLite tes ini dilewati karena lock tidak berlaku.
+
+### 9.8 Docker (Laravel Sail)
+
+- Container app menjalankan skrip first-boot `docker/sail-start.sh`: membuat `.env` dari `.env.example` bila belum ada, membuat `APP_KEY`, menjalankan `npm ci` dan `npm run build` bila belum ada build, lalu `artisan serve` di port 80.
