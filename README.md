@@ -71,7 +71,7 @@ First boot creates `.env`, the app key and the frontend build (`docker/sail-star
 
 ### QRIS (Midtrans sandbox)
 
-Put your sandbox server key in `.env`: `MIDTRANS_SERVER_KEY` (on the current Midtrans dashboard, an API key with Core API → Write and Cancel transaction → Write), `MIDTRANS_IS_PRODUCTION=false`. The client key is not used. The notification URL is `POST /webhooks/midtrans`; without a public URL the till still learns about payments by polling Midtrans.
+Put your sandbox server key in `.env`: `MIDTRANS_SERVER_KEY` (on the current Midtrans dashboard, an API key with Core API → Write and Cancel transaction → Write), `MIDTRANS_IS_PRODUCTION=false`, and for webhooks `MIDTRANS_SIGNATURE_KEY` (Access Keys → Payment → Signature Secret Key; since 28 Oct 2026 Midtrans signs notifications with it rather than the server key). The client key is not used. The notification URL is `POST /webhooks/midtrans`; without a public URL the till still learns about payments by polling Midtrans.
 
 ### Deploy (Vercel + Neon, free)
 
@@ -79,7 +79,7 @@ The repo ships a production `Dockerfile` (FrankenPHP, PHP 8.5, port 8080) that V
 
 1. **Neon:** create a project in the Singapore region and copy the **direct** connection string (connection pooling off).
 2. **App key:** run `php artisan key:generate --show` locally and copy the `base64:…` value.
-3. **Vercel:** import this repo as a new project (framework preset: Container). Add the environment variables `APP_KEY`, `DB_URL` (the Neon string), `PORT=8080`, `MIGRATE_ON_BOOT=false` and optionally `MIDTRANS_SERVER_KEY`. Every push to `main` deploys.
+3. **Vercel:** import this repo as a new project (framework preset: Container). Add the environment variables `APP_KEY`, `DB_URL` (the Neon string), `PORT=8080`, `MIGRATE_ON_BOOT=false` and optionally `MIDTRANS_SERVER_KEY` and `MIDTRANS_SIGNATURE_KEY`. Every push to `main` deploys.
 4. **GitHub:** in this repo's Settings → Secrets and variables → Actions add the secret `DEMO_DB_URL` (the same Neon string). Run the `demo-db` workflow by hand with `mode=reset` once to create the tables and the demo data (it replaces whatever is in that database). After that, every green `tests` run on `main` migrates it.
 
 For Midtrans, set the payment notification URL to `https://<your-project>.vercel.app/webhooks/midtrans`. Other Docker hosts with a single instance can instead migrate at boot (the default) and seed with `DEMO_SEED=true` and `POS_DEMO_SALES_HISTORY=true`.

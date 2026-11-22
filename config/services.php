@@ -35,6 +35,11 @@ return [
     'midtrans' => [
         'server_key' => env('MIDTRANS_SERVER_KEY'),
         'client_key' => env('MIDTRANS_CLIENT_KEY'),
+        // Signs payment notifications (Access Keys → Payment → Signature Secret Key). Empty: the
+        // server key is used, which only matches on accounts where the two are still equal.
+        'signature_key' => env('MIDTRANS_SIGNATURE_KEY'),
+        // The one before the last rotation; set briefly so retries signed with it still pass.
+        'signature_key_previous' => env('MIDTRANS_SIGNATURE_KEY_PREVIOUS'),
         'is_production' => (bool) env('MIDTRANS_IS_PRODUCTION', false),
         'qris_acquirer' => env('MIDTRANS_QRIS_ACQUIRER', 'gopay'),
         'qris_expiry_minutes' => (int) env('MIDTRANS_QRIS_EXPIRY_MINUTES', 15),

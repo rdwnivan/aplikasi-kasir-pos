@@ -72,16 +72,44 @@ final class MidtransClient
         return $this->send('post', '/v2/'.rawurlencode($orderId).'/cancel');
     }
 
-    /** signature_key = SHA512(order_id + status_code + gross_amount + server_key) */
+    /**
+     * signature_key = SHA512(order_id + status_code + gross_amount + key).
+     *
+     * Since 28 Oct 2026 the key is the dashboard's Signature Secret Key, which differs from the
+     * server key once a new server key is created or the secret is regenerated. Without one
+     * configured we fall back to the server key (older accounts, where the two are equal). The
+     * previous secret is also accepted after a rotation, as Midtrans may still retry with it.
+     */
     public function signatureMatches(string $orderId, string $statusCode, string $grossAmount, string $signature): bool
     {
         if (! $this->isConfigured()) {
             return false;
         }
 
-        $expected = hash('sha512', $orderId.$statusCode.$grossAmount.$this->serverKey());
+        $signature = strtolower($signature);
 
-        return hash_equals($expected, strtolower($signature));
+        foreach ($this->signatureKeys() as $key) {
+            if (hash_equals(hash('sha512', $orderId.$statusCode.$grossAmount.$key), $signature)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @return list<string> */
+    private function signatureKeys(): array
+    {
+        $current = config('services.midtrans.signature_key');
+        $previous = config('services.midtrans.signature_key_previous');
+
+        $keys = is_string($current) && $current !== '' ? [$current] : [$this->serverKey()];
+
+        if (is_string($previous) && $previous !== '') {
+            $keys[] = $previous;
+        }
+
+        return $keys;
     }
 
     /**

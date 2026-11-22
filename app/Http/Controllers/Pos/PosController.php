@@ -38,7 +38,8 @@ class PosController extends Controller
                 'dppDenominator' => $tax->dppDenominator,
                 'pricesIncludeTax' => $tax->pricesIncludeTax,
             ],
-            'lastSale' => self::lastSale($request),
+            // Lazy, so a partial reload that leaves it out doesn't use up the one-time display.
+            'lastSale' => fn () => self::lastSale($request),
             'qrisEnabled' => $midtrans->isConfigured(),
             'pendingQris' => self::pendingQris($shift),
         ]);
@@ -116,10 +117,15 @@ class PosController extends Controller
             ->all());
     }
 
-    /** @return array<string, mixed>|null */
+    /**
+     * The sale to show in the "Transaksi berhasil" dialog, once: the id is taken out of the
+     * session here. QRIS stores it with put() from a polling XHR, so it would otherwise stick.
+     *
+     * @return array<string, mixed>|null
+     */
     private static function lastSale(Request $request): ?array
     {
-        $id = $request->session()->get('last_sale_id');
+        $id = $request->session()->pull('last_sale_id');
         $sale = is_numeric($id) ? Sale::query()->where('user_id', $request->user()->id)->find((int) $id) : null;
 
         return $sale === null || $sale->status !== SaleStatus::Completed ? null : [

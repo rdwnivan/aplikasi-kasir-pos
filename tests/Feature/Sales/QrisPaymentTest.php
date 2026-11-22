@@ -183,6 +183,32 @@ it('rejects unsigned or tampered notifications and logs them', function () {
         ->and(PaymentNotification::where('signature_valid', false)->count())->toBe(2);
 });
 
+it('verifies notifications with the Signature Secret Key once one is configured', function () {
+    config(['services.midtrans.signature_key' => 'SIGNATURE-SECRET-TESTONLY']);
+    fakeMidtrans();
+    $sale = startQris();
+
+    // Signed with the server key: no longer accepted once the secret differs.
+    $this->postJson(route('webhooks.midtrans'), notification($sale, 'settlement'))->assertForbidden();
+    expect($sale->fresh()->status)->toBe(SaleStatus::PendingPayment);
+
+    $this->postJson(route('webhooks.midtrans'), notification($sale, 'settlement', key: 'SIGNATURE-SECRET-TESTONLY'))
+        ->assertOk()->assertJson(['result' => 'settled']);
+    expect($sale->fresh()->status)->toBe(SaleStatus::Completed);
+});
+
+it('still accepts the previous Signature Secret Key during a rotation', function () {
+    config([
+        'services.midtrans.signature_key' => 'NEW-SECRET-TESTONLY',
+        'services.midtrans.signature_key_previous' => 'OLD-SECRET-TESTONLY',
+    ]);
+    fakeMidtrans();
+    $sale = startQris();
+
+    $this->postJson(route('webhooks.midtrans'), notification($sale, 'settlement', key: 'OLD-SECRET-TESTONLY'))
+        ->assertOk()->assertJson(['result' => 'settled']);
+});
+
 it('ignores a correctly signed notification for the wrong amount or an unknown order', function () {
     fakeMidtrans();
     $sale = startQris();
@@ -226,6 +252,12 @@ it('learns about the payment by polling Midtrans when no webhook arrives', funct
         ->assertSessionHas('last_sale_id', $sale->id);
 
     expect($this->product->fresh()->stock_on_hand)->toBe(7);
+
+    // The till shows "Transaksi berhasil" once, not on every later visit.
+    $this->actingAs($this->cashier)->get(route('pos.index'))
+        ->assertInertia(fn (Assert $page) => $page->where('lastSale.number', $sale->number));
+    $this->actingAs($this->cashier)->get(route('pos.index'))
+        ->assertInertia(fn (Assert $page) => $page->where('lastSale', null));
 });
 
 it('throttles live status checks while polling', function () {
