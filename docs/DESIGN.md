@@ -114,10 +114,6 @@ Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permi
 - **`sail up`.** `compose.yaml` dan `docker/sail-start.sh` sudah ditulis, tetapi container belum pernah dijalankan.
 - **GitHub Actions.** Workflow `.github/workflows/tests.yml` sudah ada, tetapi repo belum di-push sehingga belum pernah jalan di runner GitHub. Perintah yang sama sudah lulus secara lokal (SQLite dan PostgreSQL).
 
-### Isu terbuka
-
-- Harga beli di `CatalogSeeder` hampir sama dengan harga jual tanpa PPN untuk satuan besar (dus/karung), sehingga data demo menunjukkan margin kotor sekitar 0,3%. Ini masalah data demo, bukan perhitungan.
-
 ## 9. Keputusan implementasi (2026-11-22)
 
 ### 9.1 Laba kotor
@@ -156,6 +152,7 @@ Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permi
 ### 9.6 Platform & data demo
 
 - **PHP minimal 8.4** (`composer.json`: `^8.4`); pengembangan dan Sail memakai PHP 8.5.
+- Harga beli di `CatalogSeeder` sekitar 88% dari harga jual satuan terbesar tanpa PPN, sehingga data demo menunjukkan margin kotor wajar (±12%).
 - `DemoSalesSeeder` (30 hari penjualan, restok, retur, QRIS yang sudah lunas) **hanya jalan saat `APP_ENV=local`**, supaya `migrate --seed` di produksi tidak mengisi transaksi palsu. Semua data dibuat lewat Action yang sama dengan aplikasi, jadi buku besar tetap konsisten.
 
 ### 9.7 CI

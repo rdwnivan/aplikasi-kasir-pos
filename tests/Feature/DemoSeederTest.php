@@ -19,10 +19,10 @@ it('seeds demo accounts with roles and an opening stock that matches the ledger'
 
     expect(GoodsReceipt::count())->toBe(1);
 
-    // Indomie Goreng: 5 dus × 40 = 200 pcs, at 112.000 / 40 = 2.800 per pcs
+    // Indomie Goreng: 5 dus × 40 = 200 pcs, at 99.000 / 40 = 2.475 per pcs
     expect(Product::where('sku', 'MIE-001')->sole())
         ->stock_on_hand->toBe(200)
-        ->avg_cost->toBe('2800.0000');
+        ->avg_cost->toBe('2475.0000');
 
     $this->artisan('stock:rebuild')->assertSuccessful();
 });

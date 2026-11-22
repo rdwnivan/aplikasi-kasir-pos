@@ -19,20 +19,23 @@ class CatalogSeeder extends Seeder
 {
     /**
      * [sku, name, category, base unit, min stock, units: [unit, conversion, sell price, buy price per unit], opening qty in largest unit]
+     *
+     * Sell prices include PPN (effective 11%); buy prices are about 88% of the largest unit's
+     * price without PPN, so the demo shows a gross margin of roughly 10–15%.
      */
     private const PRODUCTS = [
-        ['MIE-001', 'Indomie Goreng 85g', 'Makanan Instan', 'pcs', 40, [['pcs', 1, 3500, null], ['dus', 40, 125000, 112000]], 5],
-        ['MIE-002', 'Indomie Soto 70g', 'Makanan Instan', 'pcs', 40, [['pcs', 1, 3300, null], ['dus', 40, 118000, 106000]], 3],
-        ['MNM-001', 'Aqua Botol 600ml', 'Minuman', 'pcs', 24, [['pcs', 1, 4000, null], ['dus', 24, 85000, 72000]], 4],
-        ['MNM-002', 'Teh Botol Sosro 450ml', 'Minuman', 'pcs', 24, [['pcs', 1, 5000, null], ['dus', 24, 110000, 96000]], 3],
-        ['KOP-001', 'Kopi Kapal Api Special Mix Sachet', 'Minuman', 'pcs', 20, [['pcs', 1, 1500, null], ['renceng', 10, 14000, 12000]], 10],
-        ['SMB-001', 'Beras Rojolele 5kg', 'Sembako', 'karung', 5, [['karung', 1, 78000, 70000]], 20],
-        ['SMB-002', 'Gula Pasir Gulaku 1kg', 'Sembako', 'pcs', 10, [['pcs', 1, 18500, 16500]], 30],
-        ['SMB-003', 'Minyak Goreng Bimoli 2L', 'Sembako', 'pcs', 6, [['pcs', 1, 40000, null], ['dus', 6, 230000, 216000]], 4],
-        ['SMB-004', 'Telur Ayam Negeri', 'Sembako', 'butir', 30, [['butir', 1, 2200, null], ['tray', 30, 62000, 54000]], 4],
-        ['MDI-001', 'Sabun Lifebuoy 75g', 'Perawatan Diri', 'pcs', 8, [['pcs', 1, 4500, null], ['pak', 4, 17000, 15000]], 6],
-        ['MDI-002', 'Pasta Gigi Pepsodent 190g', 'Perawatan Diri', 'pcs', 6, [['pcs', 1, 14500, 12000]], 12],
-        ['RT-001', 'Rinso Anti Noda 770g', 'Kebutuhan Rumah', 'pcs', 5, [['pcs', 1, 24000, 21000]], 10],
+        ['MIE-001', 'Indomie Goreng 85g', 'Makanan Instan', 'pcs', 40, [['pcs', 1, 3500, null], ['dus', 40, 125000, 99000]], 5],
+        ['MIE-002', 'Indomie Soto 70g', 'Makanan Instan', 'pcs', 40, [['pcs', 1, 3300, null], ['dus', 40, 118000, 93500]], 3],
+        ['MNM-001', 'Aqua Botol 600ml', 'Minuman', 'pcs', 24, [['pcs', 1, 4000, null], ['dus', 24, 85000, 67500]], 4],
+        ['MNM-002', 'Teh Botol Sosro 450ml', 'Minuman', 'pcs', 24, [['pcs', 1, 5000, null], ['dus', 24, 110000, 87000]], 3],
+        ['KOP-001', 'Kopi Kapal Api Special Mix Sachet', 'Minuman', 'pcs', 20, [['pcs', 1, 1500, null], ['renceng', 10, 14000, 11000]], 10],
+        ['SMB-001', 'Beras Rojolele 5kg', 'Sembako', 'karung', 5, [['karung', 1, 78000, 62000]], 20],
+        ['SMB-002', 'Gula Pasir Gulaku 1kg', 'Sembako', 'pcs', 10, [['pcs', 1, 18500, 14700]], 30],
+        ['SMB-003', 'Minyak Goreng Bimoli 2L', 'Sembako', 'pcs', 6, [['pcs', 1, 40000, null], ['dus', 6, 230000, 182000]], 4],
+        ['SMB-004', 'Telur Ayam Negeri', 'Sembako', 'butir', 30, [['butir', 1, 2200, null], ['tray', 30, 62000, 49000]], 4],
+        ['MDI-001', 'Sabun Lifebuoy 75g', 'Perawatan Diri', 'pcs', 8, [['pcs', 1, 4500, null], ['pak', 4, 17000, 13500]], 6],
+        ['MDI-002', 'Pasta Gigi Pepsodent 190g', 'Perawatan Diri', 'pcs', 6, [['pcs', 1, 14500, 11500]], 12],
+        ['RT-001', 'Rinso Anti Noda 770g', 'Kebutuhan Rumah', 'pcs', 5, [['pcs', 1, 24000, 19000]], 10],
     ];
 
     public function run(): void
