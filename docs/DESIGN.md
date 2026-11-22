@@ -141,7 +141,7 @@ Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permi
 
 - Status transaksi: `pending_payment` → `completed` (settlement) atau `cancelled` (expire / cancel / deny / failure). Transaksi `cancelled` yang ternyata dibayar di detik terakhir tetap menjadi `completed`, karena uangnya nyata.
 - **Stok baru keluar saat settlement**, tepat sekali. Selama `pending_payment` stok tidak dipesan.
-- Webhook `POST /webhooks/midtrans` memverifikasi `signature_key` = SHA512(`order_id` + `status_code` + `gross_amount` + server key) dengan `hash_equals`, dan **idempotent**: transaksi dikunci dengan `SELECT … FOR UPDATE`, lalu notifikasi yang tidak mengubah status diabaikan.
+- Webhook `POST /webhooks/midtrans` memverifikasi `signature_key` = SHA512(`order_id` + `status_code` + `gross_amount` + kunci tanda tangan) dengan `hash_equals`. Kuncinya _Signature Secret Key_ (`MIDTRANS_SIGNATURE_KEY`, plus `MIDTRANS_SIGNATURE_KEY_PREVIOUS` opsional saat rotasi); server key hanya dipakai bila keduanya kosong, karena sejak 28 Okt 2026 Midtrans menandatangani notifikasi akun ber-access key baru dengan kunci terpisah (lihat §8). Webhook juga **idempotent**: transaksi dikunci dengan `SELECT … FOR UPDATE`, lalu notifikasi yang tidak mengubah status diabaikan.
 - Layar kasir juga **polling status ke Midtrans setiap 3 detik**, sehingga pembayaran tetap terdeteksi walau webhook tidak sampai (mis. server lokal tanpa URL publik).
 - State machine ada di `app/Actions/Sales/QrisPayments.php`; pembuatan QR di `StartQrisPayment`.
 
@@ -168,3 +168,93 @@ Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permi
 ### 9.8 Docker (Laravel Sail)
 
 - Container app menjalankan skrip first-boot `docker/sail-start.sh`: membuat `.env` dari `.env.example` bila belum ada, membuat `APP_KEY`, menjalankan `npm ci` dan `npm run build` bila belum ada build, lalu `artisan serve` di port 80.
+
+## 10. v2: Purchase Order + penerimaan parsial (rancangan, 2026-11-23)
+
+Tujuan: toko bisa mencatat **apa yang sudah dipesan ke supplier dan apa yang masih ditunggu**, lalu menerima barangnya bertahap. Penerimaan langsung tanpa PO (§5) tetap ada untuk belanja dadakan.
+
+### 10.1 Prinsip
+
+- **PO tidak menyentuh stok maupun HPP.** Stok hanya bertambah lewat penerimaan barang (GR), yang tetap memanggil `StockLedger::receive()` dengan type `purchase` dan **harga beli aktual** di GR. Harga di PO hanya harga kesepakatan dan menjadi nilai awal form penerimaan.
+- `stock:rebuild`, nilai persediaan, laba kotor, dan semua laporan penjualan tidak berubah.
+- Jumlah yang sudah diterima **diturunkan dari baris GR** (jumlah `goods_receipt_items.qty` per `purchase_order_item_id`), tidak disimpan dua kali. Yang disimpan di PO hanya `status`, dan status dihitung ulang di transaksi yang sama setiap kali ada penerimaan.
+
+### 10.2 Skema (migrasi baru, hanya menambah)
+
+`purchase_orders`
+
+| Kolom                       | Keterangan                                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------------------------- |
+| `number` (nullable, unik)   | `PO-YYYYMMDD-0001`, diberikan saat **dipesan** (draft belum bernomor, seperti transaksi ditahan)  |
+| `supplier_id`               | wajib; `restrictOnDelete` (supplier yang punya PO tidak bisa dihapus, sama seperti yang punya GR) |
+| `user_id`                   | pembuat                                                                                           |
+| `status`                    | `App\Enums\PurchaseOrderStatus`: `draft`, `ordered`, `partial`, `received`, `closed`, `cancelled` |
+| `expected_at` (date, null)  | perkiraan barang datang; dipakai untuk menandai PO terlambat                                      |
+| `ordered_at`, `finished_at` | timestamp saat dipesan dan saat selesai / ditutup / dibatalkan                                    |
+| `total`                     | integer Rupiah, Σ subtotal baris pesanan                                                          |
+| `note`                      | catatan; alasan wajib diisi saat menutup sisa pesanan atau membatalkan                            |
+
+`purchase_order_items`: `purchase_order_id` (cascade), `product_id`, `unit_id` (satuan beli, mis. dus), `qty` (dalam satuan itu), `unit_price` (integer Rupiah per satuan itu), `subtotal`. Satu produk + satuan hanya boleh muncul sekali per PO.
+
+Tambahan kolom nullable: `goods_receipts.purchase_order_id` dan `goods_receipt_items.purchase_order_item_id` (keduanya `restrictOnDelete`). GR lama dan GR tanpa PO tetap `null`.
+
+### 10.3 Alur & status
+
+```
+draft ──Pesan──▶ ordered ──terima sebagian──▶ partial ──terima sisa──▶ received
+  │                │                            │
+ hapus           Batal (belum ada              Tutup sisa (supplier tidak
+                 penerimaan)                    mengirim sisanya) ──▶ closed
+                   ▼
+               cancelled
+```
+
+- **Draft**: bebas diubah atau dihapus. Pilih supplier, perkiraan tanggal datang, dan baris (produk, satuan, qty, harga). Harga awal per baris = harga beli terakhir produk+satuan itu dari GR, bila ada.
+- **Pesan**: nomor PO dibuat (`DocumentNumber`, di dalam transaksi), baris dikunci dan tidak bisa diubah lagi.
+- **Terima barang** (dari halaman PO): form GR terisi sisa qty tiap baris, satuan mengikuti baris PO, harga awal = harga PO tapi **boleh diubah** sesuai faktur. Qty per baris 0 sampai sisa; minimal satu baris > 0. **Tidak boleh melebihi sisa** dan tidak bisa menambah produk di luar PO; kelebihan atau barang bonus dicatat sebagai GR biasa tanpa PO. Setelah disimpan, status menjadi `partial` atau `received`.
+- **Tutup sisa** (`partial → closed`): sisa pesanan tidak akan datang. **Batal** (`ordered → cancelled`): hanya bila belum ada penerimaan. Keduanya wajib mengisi alasan.
+- Konversi satuan dibaca saat GR dibuat (seperti GR biasa) dan di-snapshot di `goods_receipt_items.conversion`. Sisa pesanan dihitung dalam satuan baris PO, jadi perubahan konversi produk tidak mengacaukan sisa.
+
+### 10.4 Konkurensi & transaksi
+
+- Semua aksi yang mengubah PO (`OrderPurchaseOrder`, `ReceivePurchaseOrder`, `ClosePurchaseOrder`, `CancelPurchaseOrder`) mengunci baris PO dengan `SELECT … FOR UPDATE` lalu memeriksa ulang status. Dua penerimaan bersamaan untuk PO yang sama berjalan bergantian, jadi sisa tidak bisa diterima dua kali.
+- Urutan kunci: **PO dulu, lalu produk** dalam urutan `product_id` (dari `ReceiveGoods`), sama untuk semua alur, sehingga tidak ada deadlock dengan transaksi kasir.
+- `ReceivePurchaseOrder` memvalidasi baris terhadap PO lalu memanggil `ReceiveGoods` di transaksi yang sama. `ReceiveGoods::handle()` mendapat parameter opsional (`purchaseOrder`, dan `purchase_order_item_id` per baris), jadi pemanggil lama (`CatalogSeeder`, `DemoSalesSeeder`, controller GR) tidak berubah.
+
+### 10.5 Layar & route (owner + gudang)
+
+| URL                                 | Isi                                                                                    |
+| ----------------------------------- | -------------------------------------------------------------------------------------- |
+| `GET /pesanan-pembelian`            | daftar PO: filter status & supplier, progres terima (mis. 12/20 dus), tanda terlambat  |
+| `GET /pesanan-pembelian/buat`       | form draft; `?dari=stok-minimum` mengisi baris dari produk di bawah stok minimum       |
+| `GET /pesanan-pembelian/{po}`       | detail: baris, dipesan / diterima / sisa, daftar GR terkait, tombol aksi sesuai status |
+| `…/{po}/ubah`, `PUT`, `DELETE`      | ubah / hapus draft                                                                     |
+| `POST …/{po}/pesan`                 | draft → ordered                                                                        |
+| `GET`/`POST …/{po}/terima`          | form dan simpan penerimaan dari PO (membuat GR, lalu diarahkan ke detail GR)           |
+| `POST …/{po}/tutup`, `…/{po}/batal` | tutup sisa / batalkan                                                                  |
+
+- Nama route `purchase-orders.*`, dipanggil dari frontend lewat Wayfinder. Menu sidebar "Pesanan pembelian" di atas "Penerimaan barang".
+- Detail GR menampilkan tautan ke PO-nya, dan daftar GR bisa difilter "dari PO / tanpa PO".
+- **Isi dari stok minimum**: setiap produk dengan `stock_on_hand < min_stock` menjadi satu baris; satuan = satuan GR terakhir produk itu (atau satuan dasar), qty = cukup untuk mencapai **2 × stok minimum**, dibulatkan ke atas dalam satuan itu. Pengguna tinggal menghapus baris yang bukan untuk supplier ini. Kartu stok minimum di dashboard mendapat tombol "Buat PO".
+
+### 10.6 Dampak ke laporan
+
+- Laporan penjualan, laba kotor, produk terlaris, nilai persediaan, dan rekap shift **tidak berubah**: semuanya membaca `sales` dan `stock_movements`, sedangkan PO tidak membuat movement.
+- Dashboard owner & gudang mendapat kartu **"PO belum selesai"**: jumlah PO `ordered`/`partial`, nilai sisa pesanan (Σ sisa qty × harga PO), dan berapa yang sudah lewat `expected_at`.
+- Di luar cakupan ini: ekspor Excel PO, cetak/kirim PO ke supplier, harga per supplier, utang dagang.
+
+### 10.7 Data demo & deploy
+
+- `DemoSalesSeeder`: sebagian restok dibuat lewat PO (dipesan lalu diterima penuh), dan di hari-hari terakhir ada satu PO diterima sebagian, satu PO dipesan yang belum datang (satu di antaranya terlambat), serta satu draft. Semuanya lewat Action yang sama.
+- Migrasinya hanya menambah tabel dan kolom nullable, jadi workflow `demo-db` (migrate) aman untuk DB demo yang sudah ada. DB demo live **baru berisi contoh PO setelah `demo-db` mode `reset`**, yang tetap menunggu izin; tanpa itu PO bisa dicoba dengan membuatnya langsung di demo.
+
+### 10.8 Rencana tes (ditulis lebih dulu)
+
+- Siklus status: draft bisa diubah/dihapus; setelah dipesan baris terkunci dan bernomor `PO-…`; aksi yang tidak sah untuk status tertentu ditolak dengan pesan validasi.
+- Penerimaan: sebagian lalu sisanya → `partial` → `received`; melebihi sisa, produk di luar PO, PO `draft`/`closed`/`cancelled` ditolak tanpa membuat GR maupun movement.
+- Stok & HPP: penerimaan dari PO memakai harga di GR (bukan harga PO) untuk moving average; `stock:rebuild` tetap cocok.
+- Tutup sisa / batal: alasan wajib; batal ditolak setelah ada penerimaan.
+- Isi dari stok minimum: produk, satuan, dan qty saran sesuai aturan §10.5.
+- Akses: kasir mendapat 403 di semua route PO.
+- Konkurensi (PostgreSQL, `tests/Concurrency`): dua proses menerima sisa terakhir PO yang sama, hanya satu yang berhasil.
+- `DemoSalesSeeder` tetap jalan (`migrate:fresh --seed` dengan `APP_ENV=local`).
