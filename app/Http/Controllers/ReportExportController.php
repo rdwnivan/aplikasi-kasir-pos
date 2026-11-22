@@ -53,7 +53,7 @@ class ReportExportController extends Controller
 
         return (new Spreadsheet)->sheet(
             'Produk terlaris',
-            self::title('Produk terlaris', $range, 'Jumlah dalam satuan dasar, dikurangi retur pada periode yang sama.'),
+            self::title('Produk terlaris', $range, 'Jumlah dalam satuan dasar, dikurangi retur pada periode yang sama. Laba kotor tanpa PPN, sama dengan laporan penjualan.'),
             [
                 ['label' => 'Peringkat', 'format' => Spreadsheet::NUMBER, 'width' => 9],
                 ['label' => 'SKU', 'width' => 12],
@@ -62,12 +62,14 @@ class ReportExportController extends Controller
                 ['label' => 'Terjual', 'format' => Spreadsheet::NUMBER, 'width' => 10],
                 ['label' => 'Retur', 'format' => Spreadsheet::NUMBER, 'width' => 10],
                 ['label' => 'Bersih', 'format' => Spreadsheet::NUMBER, 'width' => 10],
-                ['label' => 'Omzet', 'format' => Spreadsheet::RUPIAH],
+                ['label' => 'Omzet (incl. PPN)', 'format' => Spreadsheet::RUPIAH],
+                ['label' => 'Penjualan bersih', 'format' => Spreadsheet::RUPIAH],
                 ['label' => 'HPP', 'format' => Spreadsheet::RUPIAH],
-                ['label' => 'Laba', 'format' => Spreadsheet::RUPIAH],
+                ['label' => 'Laba kotor', 'format' => Spreadsheet::RUPIAH],
+                ['label' => 'Margin', 'format' => Spreadsheet::PERCENT, 'width' => 9],
             ],
             array_map(fn (array $r, int $i) => [
-                $i + 1, $r['sku'], $r['name'], $r['baseUnit'], $r['soldQty'], $r['returnedQty'], $r['netQty'], $r['revenue'], $r['cogs'], $r['profit'],
+                $i + 1, $r['sku'], $r['name'], $r['baseUnit'], $r['soldQty'], $r['returnedQty'], $r['netQty'], $r['revenue'], $r['netSales'], $r['cogs'], $r['profit'], $r['margin'],
             ], $rows, array_keys($rows)),
         )->download(self::filename('produk-terlaris', $range));
     }

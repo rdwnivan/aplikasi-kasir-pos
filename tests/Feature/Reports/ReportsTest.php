@@ -4,6 +4,7 @@ use App\Actions\Sales\CloseShift;
 use App\Actions\Sales\CompleteSale;
 use App\Actions\Sales\OpenShift;
 use App\Actions\Sales\ProcessSaleReturn;
+use App\Enums\DiscountType;
 use App\Enums\Role;
 use App\Models\Category;
 use App\Models\Product;
@@ -111,6 +112,33 @@ it('ranks products by quantity sold net of returns', function () {
     expect($rows)->toHaveCount(2)
         ->and($rows[0])->toMatchArray(['name' => 'Mie', 'soldQty' => 3, 'returnedQty' => 0, 'netQty' => 3])
         ->and($rows[1])->toMatchArray(['name' => 'Aqua', 'soldQty' => 2, 'returnedQty' => 1, 'netQty' => 1, 'cogs' => 8000]);
+});
+
+it('computes best-seller profit without PPN and net of returns, like the sales report', function () {
+    $rows = collect(TopProducts::build(DateRange::of('2026-11-20', '2026-11-21')))->keyBy('name');
+
+    // Aqua: paid 22.200 (PPN 2.200), 11.100 refunded (PPN 1.100); HPP 16.000 − 8.000 returned.
+    expect($rows['Aqua'])->toMatchArray(['revenue' => 11100, 'netSales' => 10000, 'cogs' => 8000, 'profit' => 2000])
+        ->and($rows['Mie'])->toMatchArray(['revenue' => 9990, 'netSales' => 9000, 'cogs' => 6000, 'profit' => 3000]);
+});
+
+it('apportions the transaction discount and PPN so best sellers add up to the sales report', function () {
+    Carbon::setTestNow('2026-11-21 10:00:00');
+    // 11.100 + 2 × 3.330 = 17.760, minus 7% → odd rupiah to split across the two lines.
+    app(CompleteSale::class)->handle($this->andi, [
+        ['product_unit_id' => $this->aquaUnit->id, 'qty' => 1],
+        ['product_unit_id' => $this->mieUnit->id, 'qty' => 2],
+    ], paidAmount: 20000, discountType: DiscountType::Percent, discountValue: 7);
+
+    $range = DateRange::of('2026-11-20', '2026-11-21');
+    $rows = TopProducts::build($range);
+    $totals = SalesSummary::build($range)['totals'];
+
+    expect(array_sum(array_column($rows, 'revenue')))->toBe($totals['gross'] - $totals['refunds'])
+        ->and(array_sum(array_column($rows, 'netSales')))->toBe($totals['netSales'])
+        // HPP is rounded per product, so allow one rupiah per row.
+        ->and(abs(array_sum(array_column($rows, 'cogs')) - $totals['cogs']))->toBeLessThanOrEqual(count($rows))
+        ->and(abs(array_sum(array_column($rows, 'profit')) - $totals['grossProfit']))->toBeLessThanOrEqual(count($rows));
 });
 
 it('values stock at the moving-average HPP, per product and category', function () {

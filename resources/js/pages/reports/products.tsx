@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/table';
 import { formatQty } from '@/lib/format';
 import { formatRupiah } from '@/lib/money';
+import { cn } from '@/lib/utils';
 import products from '@/routes/products';
 import reports from '@/routes/reports';
 
@@ -24,8 +25,10 @@ export type TopProductRow = {
     returnedQty: number;
     netQty: number;
     revenue: number;
+    netSales: number;
     cogs: number;
     profit: number;
+    margin: number;
 };
 
 export default function ProductsReport({
@@ -73,6 +76,9 @@ export default function ProductsReport({
                                     Omzet
                                 </TableHead>
                                 <TableHead className="text-right">
+                                    Bersih
+                                </TableHead>
+                                <TableHead className="text-right">
                                     HPP
                                 </TableHead>
                                 <TableHead className="text-right">
@@ -84,7 +90,7 @@ export default function ProductsReport({
                             {rows.length === 0 && (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={7}
+                                        colSpan={8}
                                         className="py-10 text-center text-muted-foreground"
                                     >
                                         Belum ada penjualan di rentang tanggal
@@ -135,10 +141,24 @@ export default function ProductsReport({
                                         {formatRupiah(r.revenue)}
                                     </TableCell>
                                     <TableCell className="text-right whitespace-nowrap tabular-nums">
+                                        {formatRupiah(r.netSales)}
+                                    </TableCell>
+                                    <TableCell className="text-right whitespace-nowrap tabular-nums">
                                         {formatRupiah(r.cogs)}
                                     </TableCell>
-                                    <TableCell className="text-right font-medium whitespace-nowrap tabular-nums">
-                                        {formatRupiah(r.profit)}
+                                    <TableCell className="text-right whitespace-nowrap tabular-nums">
+                                        <div
+                                            className={cn(
+                                                'font-medium',
+                                                r.profit < 0 &&
+                                                    'text-destructive',
+                                            )}
+                                        >
+                                            {formatRupiah(r.profit)}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                            {`${r.margin.toLocaleString('id-ID')}%`}
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -146,9 +166,11 @@ export default function ProductsReport({
                     </Table>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                    Omzet per produk memakai total baris (setelah diskon item,
-                    sebelum diskon transaksi; termasuk PPN bila harga sudah
-                    termasuk PPN).
+                    Omzet = yang dibayar pelanggan untuk produk ini (bagian dari
+                    total transaksi setelah diskon, termasuk PPN) dikurangi
+                    refund. Bersih = omzet tanpa PPN. Laba = bersih − HPP, sama
+                    seperti laporan penjualan &amp; laba (HPP dibulatkan per
+                    produk, jadi totalnya bisa selisih beberapa rupiah).
                 </p>
             </div>
         </>

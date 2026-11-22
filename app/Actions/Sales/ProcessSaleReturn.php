@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\Auth\OwnerPin;
 use App\Services\Documents\DocumentNumber;
 use App\Services\Inventory\StockLedger;
+use App\Support\Apportion;
 use App\Support\Decimal;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -166,30 +167,7 @@ final class ProcessSaleReturn
      */
     public static function lineShares(Sale $sale, array $items): array
     {
-        $subtotal = array_sum(array_map(fn (SaleItem $i) => $i->line_total, $items));
-        if ($subtotal === 0) {
-            return array_map(fn () => 0, $items);
-        }
-
-        $shares = [];
-        $remainders = [];
-        foreach ($items as $id => $item) {
-            $exact = $sale->total * $item->line_total;
-            $shares[$id] = intdiv($exact, $subtotal);
-            $remainders[$id] = $exact % $subtotal;
-        }
-
-        $left = $sale->total - array_sum($shares);
-        arsort($remainders);
-        foreach (array_keys($remainders) as $id) {
-            if ($left <= 0) {
-                break;
-            }
-            $shares[$id]++;
-            $left--;
-        }
-
-        return $shares;
+        return Apportion::byWeight($sale->total, array_map(fn (SaleItem $i) => $i->line_total, $items));
     }
 
     /**

@@ -116,7 +116,6 @@ Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permi
 
 ### Isu terbuka
 
-- Laporan **produk terlaris** menghitung laba sebagai `line_total − HPP`: masih termasuk PPN, sebelum diskon transaksi, dan omzet tidak dikurangi retur. Akibatnya tidak konsisten dengan laba kotor di laporan penjualan (§9.1).
 - Harga beli di `CatalogSeeder` hampir sama dengan harga jual tanpa PPN untuk satuan besar (dus/karung), sehingga data demo menunjukkan margin kotor sekitar 0,3%. Ini masalah data demo, bukan perhitungan.
 
 ## 9. Keputusan implementasi (2026-11-22)
@@ -126,6 +125,7 @@ Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permi
 - Laba kotor = **penjualan bersih tanpa PPN** − HPP. PPN dipungut untuk negara, jadi bukan pendapatan toko.
 - Penjualan bersih = (total penjualan − PPN penjualan) − (refund − PPN refund). HPP = HPP barang terjual − HPP barang yang diretur (memakai HPP baris aslinya).
 - Implementasi: `app/Reports/SalesSummary.php`, dipakai juga oleh dashboard.
+- Laporan **produk terlaris** memakai aturan yang sama per produk (`app/Reports/TopProducts.php`): total dan PPN setiap transaksi dibagi ke barisnya menurut `line_total`, PPN setiap retur dibagi menurut nilai refund per baris, semuanya dengan _largest remainder_ (`App\Support\Apportion`, juga dipakai retur di §9.2). Omzet = yang dibayar pelanggan dikurangi refund (termasuk PPN); penjualan bersih = omzet tanpa PPN; laba = bersih − HPP. Jumlah omzet dan penjualan bersih semua produk sama persis dengan laporan penjualan; HPP dibulatkan per produk, jadi total HPP/laba bisa selisih beberapa rupiah.
 
 ### 9.2 Retur
 
