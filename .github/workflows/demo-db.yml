@@ -1,0 +1,124 @@
+name: demo-db
+
+# Database of the public demo (Neon), which the app itself doesn't touch at boot on Vercel
+# (MIGRATE_ON_BOOT=false): several instances may start at once there.
+#
+# - After every green tests run on a push to main: `migrate --force`.
+# - By hand with mode=reset: rebuild the demo data. It is seeded into a throwaway PostgreSQL
+#   on the runner (thousands of small queries, fast locally) and copied to Neon in one
+#   pg_dump. This REPLACES everything in the demo database.
+#
+# Needs the DEMO_DB_URL secret (Neon connection string). Without it the job is skipped.
+
+on:
+  workflow_run:
+    workflows: [tests]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'migrate, or reset (wipes the demo DB and reseeds 30 days of demo data)'
+        type: choice
+        options: [migrate, reset]
+        default: migrate
+
+permissions:
+  contents: read
+
+concurrency:
+  group: demo-db
+  cancel-in-progress: false
+
+env:
+  PHP_VERSION: '8.5'
+
+jobs:
+  database:
+    name: Demo database (${{ inputs.mode || 'migrate' }})
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: kasir_demo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Check configuration
+        id: config
+        env:
+          DEMO_DB_URL: ${{ secrets.DEMO_DB_URL }}
+        run: |
+          if [ -z "$DEMO_DB_URL" ]; then
+            echo "DEMO_DB_URL is not set; nothing to do."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout code
+        if: steps.config.outputs.enabled == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+
+      - name: Setup PHP
+        if: steps.config.outputs.enabled == 'true'
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: bcmath, pdo_pgsql, intl, zip
+          tools: composer:v2
+          coverage: none
+
+      - name: Install dependencies
+        if: steps.config.outputs.enabled == 'true'
+        run: |
+          composer install --no-dev --no-interaction --no-progress --prefer-dist
+          cp .env.example .env
+          php artisan key:generate --ansi
+
+      - name: Migrate the demo database
+        if: steps.config.outputs.enabled == 'true' && (inputs.mode || 'migrate') == 'migrate'
+        env:
+          APP_ENV: production
+          DB_CONNECTION: pgsql
+          DB_URL: ${{ secrets.DEMO_DB_URL }}
+        run: php artisan migrate --force --no-interaction
+
+      # APP_ENV=local: the seeder adds the 30-day sales history, and migrate:fresh is allowed.
+      - name: Seed demo data into the runner's PostgreSQL
+        if: steps.config.outputs.enabled == 'true' && inputs.mode == 'reset'
+        env:
+          APP_ENV: local
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: kasir_demo
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+        run: php artisan migrate:fresh --seed --force --no-interaction
+
+      - name: Copy it to the demo database
+        if: steps.config.outputs.enabled == 'true' && inputs.mode == 'reset'
+        env:
+          DEMO_DB_URL: ${{ secrets.DEMO_DB_URL }}
+        run: |
+          docker run --rm --network host -e PGPASSWORD=postgres postgres:17 \
+            pg_dump -h 127.0.0.1 -U postgres --no-owner --no-privileges --clean --if-exists kasir_demo \
+            | docker run --rm -i -e DEMO_DB_URL postgres:17 \
+              sh -c 'psql "$DEMO_DB_URL" --quiet -v ON_ERROR_STOP=1'

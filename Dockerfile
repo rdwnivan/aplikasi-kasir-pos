@@ -1,6 +1,6 @@
 # Production image: FrankenPHP (Caddy + PHP 8.5) serving public/ on $PORT (8080), used by
-# the Hugging Face Spaces demo (.github/workflows/deploy-space.yml). Local development uses
-# Sail (compose.yaml) instead.
+# the Vercel demo (Container runtime, vercel.json) and any other Docker host. Local
+# development uses Sail (compose.yaml) instead.
 #
 #   docker build -t kasir-pos .
 #   docker run -p 8080:8080 -e APP_KEY=base64:... -e DB_URL=postgresql://... kasir-pos

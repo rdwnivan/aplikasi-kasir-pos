@@ -9,21 +9,27 @@ if [ -z "${APP_KEY:-}" ]; then
     exit 1
 fi
 
-# Public URL: explicit APP_URL, else what the host provides (Hugging Face Spaces: SPACE_HOST).
+# Public URL: explicit APP_URL, else what the host provides (Vercel system env vars).
 if [ -z "${APP_URL:-}" ]; then
-    if [ -n "${SPACE_HOST:-}" ]; then
-        export APP_URL="https://${SPACE_HOST}"
+    if [ -n "${VERCEL_PROJECT_PRODUCTION_URL:-}" ]; then
+        export APP_URL="https://${VERCEL_PROJECT_PRODUCTION_URL}"
     else
         export APP_URL="http://localhost:${PORT:-8080}"
     fi
 fi
 
-php artisan migrate --force --no-interaction
+# Autoscaling hosts (Vercel) may boot several instances at once; set MIGRATE_ON_BOOT=false
+# there and migrate from CI instead (.github/workflows/demo-db.yml).
+if [ "${MIGRATE_ON_BOOT:-true}" = "true" ]; then
+    php artisan migrate --force --no-interaction
+fi
 php artisan optimize
 
-# Demo deploys: roles, demo accounts and catalogue (all idempotent), plus 30 days of sales
-# history when POS_DEMO_SALES_HISTORY=true and there are no sales yet. That takes a while on
-# a small instance, so it runs in the background and the server starts accepting requests.
+# Single-instance demo hosts: roles, demo accounts and catalogue (all idempotent), plus 30
+# days of sales history when POS_DEMO_SALES_HISTORY=true and there are no sales yet. That takes
+# a while on a small instance, so it runs in the background and the server starts accepting
+# requests. Not for autoscaling hosts: two instances would seed at once, and a scaled-down
+# instance is stopped mid-seed. Use demo-db.yml there.
 if [ "${DEMO_SEED:-false}" = "true" ]; then
     echo "[start] seeding demo data in the background"
     php artisan db:seed --force --no-interaction &

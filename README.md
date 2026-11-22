@@ -73,16 +73,16 @@ First boot creates `.env`, the app key and the frontend build (`docker/sail-star
 
 Put your sandbox server key in `.env`: `MIDTRANS_SERVER_KEY` (on the current Midtrans dashboard, an API key with Core API → Write and Cancel transaction → Write), `MIDTRANS_IS_PRODUCTION=false`. The client key is not used. The notification URL is `POST /webhooks/midtrans`; without a public URL the till still learns about payments by polling Midtrans.
 
-### Deploy (Hugging Face Spaces + Neon, free, no card)
+### Deploy (Vercel + Neon, free)
 
-The repo ships a production `Dockerfile` (FrankenPHP, PHP 8.5, port 8080) and a workflow (`.github/workflows/deploy-space.yml`) that, after every green `tests` run on `main`, pushes a snapshot to a Docker [Hugging Face Space](https://huggingface.co/docs/hub/spaces-sdks-docker). The database is on [Neon](https://neon.tech) (free PostgreSQL that doesn't expire).
+The repo ships a production `Dockerfile` (FrankenPHP, PHP 8.5, port 8080) that Vercel builds with its [Container runtime](https://vercel.com/docs/functions/runtimes/container) (beta; `vercel.json` selects it and the Singapore region). The database is on [Neon](https://neon.tech) (free PostgreSQL that doesn't expire). Vercel scales instances to zero and may start several at once, so the app does not migrate or seed at boot there; the `demo-db` workflow does it from GitHub Actions.
 
 1. **Neon:** create a project in the Singapore region and copy the **direct** connection string (connection pooling off).
 2. **App key:** run `php artisan key:generate --show` locally and copy the `base64:…` value.
-3. **Space:** create a Space with the **Docker** SDK (blank template). Under Settings → Variables and secrets add the secrets `APP_KEY`, `DB_URL` (the Neon string) and optionally `MIDTRANS_SERVER_KEY`, and the variables `DEMO_SEED=true` and `POS_DEMO_SALES_HISTORY=true`.
-4. **GitHub:** create a Hugging Face access token with write access, then in this repo's Settings → Secrets and variables → Actions add the secret `HF_TOKEN` and the variable `HF_SPACE` (`user/space-name`). Push to `main`, or run the `deploy-space` workflow by hand.
+3. **Vercel:** import this repo as a new project (framework preset: Container). Add the environment variables `APP_KEY`, `DB_URL` (the Neon string), `PORT=8080`, `MIGRATE_ON_BOOT=false` and optionally `MIDTRANS_SERVER_KEY`. Every push to `main` deploys.
+4. **GitHub:** in this repo's Settings → Secrets and variables → Actions add the secret `DEMO_DB_URL` (the same Neon string). Run the `demo-db` workflow by hand with `mode=reset` once to create the tables and the demo data (it replaces whatever is in that database). After that, every green `tests` run on `main` migrates it.
 
-Each boot runs migrations; with `DEMO_SEED=true` it also seeds the demo accounts, catalogue and (with `POS_DEMO_SALES_HISTORY=true`) 30 days of sales in the background. Open the app at `https://<user>-<space-name>.hf.space` rather than inside the Space page's frame, where browsers may block the session cookie. For Midtrans, set the payment notification URL to `https://<user>-<space-name>.hf.space/webhooks/midtrans`. Free Spaces sleep after about two days without visitors.
+For Midtrans, set the payment notification URL to `https://<your-project>.vercel.app/webhooks/midtrans`. Other Docker hosts with a single instance can instead migrate at boot (the default) and seed with `DEMO_SEED=true` and `POS_DEMO_SALES_HISTORY=true`.
 
 ## Demo accounts
 
