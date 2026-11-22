@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Entry point of the production image (Dockerfile). Render's free plan has no pre-deploy
-# step, so migrations run here on every boot; they are a no-op when nothing is pending.
+# Entry point of the production image (Dockerfile). Free hosts have no pre-deploy step,
+# so migrations run here on every boot; they are a no-op when nothing is pending.
 set -euo pipefail
 cd /app
 
@@ -9,8 +9,14 @@ if [ -z "${APP_KEY:-}" ]; then
     exit 1
 fi
 
-# Render provides the public URL of the service.
-export APP_URL="${APP_URL:-${RENDER_EXTERNAL_URL:-http://localhost:${PORT:-8080}}}"
+# Public URL: explicit APP_URL, else what the host provides (Hugging Face Spaces: SPACE_HOST).
+if [ -z "${APP_URL:-}" ]; then
+    if [ -n "${SPACE_HOST:-}" ]; then
+        export APP_URL="https://${SPACE_HOST}"
+    else
+        export APP_URL="http://localhost:${PORT:-8080}"
+    fi
+fi
 
 php artisan migrate --force --no-interaction
 php artisan optimize

@@ -73,15 +73,16 @@ First boot creates `.env`, the app key and the frontend build (`docker/sail-star
 
 Put your sandbox server key in `.env`: `MIDTRANS_SERVER_KEY` (on the current Midtrans dashboard, an API key with Core API → Write and Cancel transaction → Write), `MIDTRANS_IS_PRODUCTION=false`. The client key is not used. The notification URL is `POST /webhooks/midtrans`; without a public URL the till still learns about payments by polling Midtrans.
 
-### Deploy (Render + Neon, free tiers)
+### Deploy (Hugging Face Spaces + Neon, free, no card)
 
-The repo ships a production `Dockerfile` (FrankenPHP, PHP 8.5) and a Render Blueprint (`render.yaml`): one free web service in Singapore, with the database on [Neon](https://neon.tech) (free PostgreSQL that doesn't expire).
+The repo ships a production `Dockerfile` (FrankenPHP, PHP 8.5, port 8080) and a workflow (`.github/workflows/deploy-space.yml`) that, after every green `tests` run on `main`, pushes a snapshot to a Docker [Hugging Face Space](https://huggingface.co/docs/hub/spaces-sdks-docker). The database is on [Neon](https://neon.tech) (free PostgreSQL that doesn't expire).
 
 1. **Neon:** create a project in the Singapore region and copy the **direct** connection string (connection pooling off).
 2. **App key:** run `php artisan key:generate --show` locally and copy the `base64:…` value.
-3. **Render:** New → Blueprint → pick this repo. Fill in `APP_KEY`, `DB_URL` (the Neon string) and optionally `MIDTRANS_SERVER_KEY`.
+3. **Space:** create a Space with the **Docker** SDK (blank template). Under Settings → Variables and secrets add the secrets `APP_KEY`, `DB_URL` (the Neon string) and optionally `MIDTRANS_SERVER_KEY`, and the variables `DEMO_SEED=true` and `POS_DEMO_SALES_HISTORY=true`.
+4. **GitHub:** create a Hugging Face access token with write access, then in this repo's Settings → Secrets and variables → Actions add the secret `HF_TOKEN` and the variable `HF_SPACE` (`user/space-name`). Push to `main`, or run the `deploy-space` workflow by hand.
 
-Each boot runs migrations; with `DEMO_SEED=true` it also seeds the demo accounts, catalogue and (with `POS_DEMO_SALES_HISTORY=true`) 30 days of sales in the background. For Midtrans, set the payment notification URL to `https://<your-app>.onrender.com/webhooks/midtrans`. Free instances sleep after 15 minutes idle, so the first request after that takes a while.
+Each boot runs migrations; with `DEMO_SEED=true` it also seeds the demo accounts, catalogue and (with `POS_DEMO_SALES_HISTORY=true`) 30 days of sales in the background. Open the app at `https://<user>-<space-name>.hf.space` rather than inside the Space page's frame, where browsers may block the session cookie. For Midtrans, set the payment notification URL to `https://<user>-<space-name>.hf.space/webhooks/midtrans`. Free Spaces sleep after about two days without visitors.
 
 ## Demo accounts
 

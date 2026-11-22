@@ -1,5 +1,5 @@
 # FrankenPHP config for the production image. TLS is terminated by the platform's proxy
-# (Render), so the container serves plain HTTP on $PORT.
+# (e.g. Hugging Face Spaces), so the container serves plain HTTP on $PORT.
 {
 	admin off
 	auto_https off

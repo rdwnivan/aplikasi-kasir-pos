@@ -1,10 +1,11 @@
-# Production image: FrankenPHP (Caddy + PHP 8.5) serving public/, used by the Render
-# deploy (render.yaml). Local development uses Sail (compose.yaml) instead.
+# Production image: FrankenPHP (Caddy + PHP 8.5) serving public/ on $PORT (8080), used by
+# the Hugging Face Spaces demo (.github/workflows/deploy-space.yml). Local development uses
+# Sail (compose.yaml) instead.
 #
 #   docker build -t kasir-pos .
 #   docker run -p 8080:8080 -e APP_KEY=base64:... -e DB_URL=postgresql://... kasir-pos
 #
-# docker/render-start.sh migrates (and optionally seeds) on boot, then starts the server.
+# docker/start.sh migrates (and optionally seeds) on boot, then starts the server.
 
 ARG FRANKENPHP_IMAGE=dunglas/frankenphp:1.13.6-php8.5-bookworm
 
@@ -47,9 +48,24 @@ RUN cp .env.example .env \
 # --- Final image ---------------------------------------------------------------------------
 FROM base
 
+# Production defaults; the host only needs APP_KEY and DB_URL (plus MIDTRANS_SERVER_KEY for
+# QRIS, and DEMO_SEED / POS_DEMO_SALES_HISTORY for a demo). Any of these can be overridden.
+# Nothing is queued today, so jobs run inline instead of waiting in a table with no worker.
+# TRUSTED_PROXIES=* because TLS ends at the host's proxy, the only thing that reaches us.
 ENV APP_ENV=production \
     APP_DEBUG=false \
+    APP_NAME="Kasir POS" \
+    APP_LOCALE=id \
+    APP_TIMEZONE=Asia/Jakarta \
     LOG_CHANNEL=stderr \
+    DB_CONNECTION=pgsql \
+    SESSION_DRIVER=database \
+    SESSION_SECURE_COOKIE=true \
+    CACHE_STORE=database \
+    QUEUE_CONNECTION=sync \
+    MAIL_MAILER=log \
+    TRUSTED_PROXIES=* \
+    MIDTRANS_IS_PRODUCTION=false \
     PORT=8080
 
 COPY --from=build /app /app
@@ -66,4 +82,4 @@ USER app
 
 EXPOSE 8080
 
-CMD ["bash", "/app/docker/render-start.sh"]
+CMD ["bash", "/app/docker/start.sh"]
