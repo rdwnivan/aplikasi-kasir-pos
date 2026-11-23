@@ -2,6 +2,7 @@ import { Link, usePage } from '@inertiajs/react';
 import {
     ChartColumn,
     ClipboardList,
+    ClipboardPen,
     LayoutGrid,
     PackageOpen,
     ReceiptText,
@@ -29,6 +30,7 @@ import categories from '@/routes/categories';
 import goodsReceipts from '@/routes/goods-receipts';
 import pos from '@/routes/pos';
 import products from '@/routes/products';
+import purchaseOrders from '@/routes/purchase-orders';
 import reports from '@/routes/reports';
 import stockOpnames from '@/routes/stock-opnames';
 import suppliers from '@/routes/suppliers';
@@ -79,6 +81,11 @@ export function AppSidebar() {
                   {
                       label: 'Inventori',
                       items: [
+                          {
+                              title: 'Pesanan pembelian',
+                              href: purchaseOrders.index(),
+                              icon: ClipboardPen,
+                          },
                           {
                               title: 'Penerimaan barang',
                               href: goodsReceipts.index(),

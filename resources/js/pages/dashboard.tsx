@@ -2,6 +2,8 @@ import { Head, Link } from '@inertiajs/react';
 import { DailyBarChart } from '@/components/charts/daily-bar-chart';
 import { LowStockCard } from '@/components/dashboard/low-stock-card';
 import type { LowStockItem } from '@/components/dashboard/low-stock-card';
+import { OpenOrdersCard } from '@/components/dashboard/open-orders-card';
+import type { OpenOrders } from '@/components/dashboard/open-orders-card';
 import { StatCard } from '@/components/reports/report-nav';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,6 +17,7 @@ import { formatQty } from '@/lib/format';
 import { formatRupiah, formatRupiahShort } from '@/lib/money';
 import { dashboard } from '@/routes';
 import goodsReceipts from '@/routes/goods-receipts';
+import purchaseOrders from '@/routes/purchase-orders';
 import products from '@/routes/products';
 import reports from '@/routes/reports';
 import stockOpnames from '@/routes/stock-opnames';
@@ -48,10 +51,11 @@ type Overview = {
 
 type Props = {
     lowStock: { count: number; items: LowStockItem[] } | null;
+    openOrders: OpenOrders | null;
     overview: Overview | null;
 };
 
-export default function Dashboard({ lowStock, overview }: Props) {
+export default function Dashboard({ lowStock, openOrders, overview }: Props) {
     return (
         <>
             <Head title="Dashboard" />
@@ -63,6 +67,11 @@ export default function Dashboard({ lowStock, overview }: Props) {
                         <Button asChild>
                             <Link href={goodsReceipts.create()}>
                                 Terima barang
+                            </Link>
+                        </Button>
+                        <Button variant="outline" asChild>
+                            <Link href={purchaseOrders.create()}>
+                                Buat pesanan pembelian
                             </Link>
                         </Button>
                         <Button variant="outline" asChild>
@@ -78,6 +87,7 @@ export default function Dashboard({ lowStock, overview }: Props) {
                             count={lowStock.count}
                             items={lowStock.items}
                         />
+                        {openOrders && <OpenOrdersCard {...openOrders} />}
                     </div>
                 )}
             </div>

@@ -3,6 +3,9 @@
 namespace Database\Seeders;
 
 use App\Actions\Inventory\ReceiveGoods;
+use App\Actions\Purchasing\OrderPurchaseOrder;
+use App\Actions\Purchasing\ReceivePurchaseOrder;
+use App\Actions\Purchasing\SavePurchaseOrder;
 use App\Actions\Sales\CloseShift;
 use App\Actions\Sales\CompleteSale;
 use App\Actions\Sales\OpenShift;
@@ -12,10 +15,13 @@ use App\Enums\PaymentMethod;
 use App\Models\GoodsReceiptItem;
 use App\Models\Product;
 use App\Models\ProductUnit;
+use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderItem;
 use App\Models\Sale;
 use App\Models\Supplier;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -23,7 +29,9 @@ use Illuminate\Support\Collection;
 /**
  * Thirty days of shop life for the demo dashboard and reports: a cashier shift every day,
  * 10–30 sales (busier at weekends), restocks when shelves run low (at slightly drifting
- * buy prices, so the moving-average HPP moves), and the odd return. Everything goes through
+ * buy prices, so the moving-average HPP moves; every other restock goes through a purchase
+ * order placed two days earlier), and the odd return. It ends with purchase orders in every
+ * open state: one partly received, one on its way, one late, and a draft. Everything goes through
  * the real actions, so the ledger, HPP and drawer figures are all consistent.
  *
  * Runs only in the local environment or with pos.demo_sales_history (see DatabaseSeeder), and only on a database without
@@ -32,6 +40,8 @@ use Illuminate\Support\Collection;
 class DemoSalesSeeder extends Seeder
 {
     private const DAYS = 30;
+
+    private int $restocks = 0;
 
     public function run(?CarbonImmutable $until = null): void
     {
@@ -95,6 +105,10 @@ class DemoSalesSeeder extends Seeder
                 // Most days the drawer is right; sometimes a little short or over.
                 $off = mt_rand(1, 6) === 1 ? mt_rand(-5, 2) * 1000 : 0;
                 app(CloseShift::class)->handle($shift, max(0, $expected + $off));
+            }
+
+            if ($supplier !== null) {
+                $this->openPurchaseOrders($until, $buyUnits, $receiver, $supplier->id);
             }
         } finally {
             Carbon::setTestNow();
@@ -165,9 +179,82 @@ class DemoSalesSeeder extends Seeder
             ];
         }
 
-        if ($restock !== []) {
-            app(ReceiveGoods::class)->handle($receiver, array_values($restock), $supplierId, now(), 'Restok');
+        if ($restock === []) {
+            return;
         }
+
+        // No extra random draws here, so the sales history stays the same as before POs existed.
+        if ($supplierId !== null && $this->restocks++ % 2 === 0) {
+            $arrived = now();
+            Carbon::setTestNow($arrived->copy()->subDays(2)->setTime(9, 0));
+            $order = $this->placeOrder($receiver, $supplierId, array_values($restock), $arrived->copy()->startOfDay());
+            Carbon::setTestNow($arrived);
+
+            app(ReceivePurchaseOrder::class)->handle($order, $receiver, array_values($order->items->map(fn (PurchaseOrderItem $i) => [
+                'purchase_order_item_id' => $i->id,
+                'qty' => $i->qty,
+                'unit_price' => $i->unit_price,
+            ])->all()), $arrived, 'Restok');
+
+            return;
+        }
+
+        app(ReceiveGoods::class)->handle($receiver, array_values($restock), $supplierId, now(), 'Restok');
+    }
+
+    /**
+     * The purchasing desk at the end of the demo period: a delivery that came half, one due
+     * tomorrow, one overdue, and a draft still being put together.
+     *
+     * @param  Collection<int, GoodsReceiptItem>  $buyUnits
+     */
+    private function openPurchaseOrders(CarbonImmutable $until, $buyUnits, User $receiver, int $supplierId): void
+    {
+        $lines = $buyUnits->values()->map(fn (GoodsReceiptItem $i) => [
+            'product_id' => $i->product_id,
+            'unit_id' => $i->unit_id,
+            'qty' => 4,
+            'unit_price' => $i->unit_price,
+        ]);
+        $pick = fn (int $from, int $count) => array_values($lines->slice($from, $count)->all());
+
+        if ($lines->count() < 10) {
+            return;
+        }
+
+        Carbon::setTestNow($until->subDays(4)->setTime(10, 0));
+        $partial = $this->placeOrder($receiver, $supplierId, $pick(0, 3), $until, 'Order mingguan');
+        Carbon::setTestNow($until->subDay()->setTime(21, 0));
+        app(ReceivePurchaseOrder::class)->handle($partial, $receiver, array_values($partial->items->map(fn (PurchaseOrderItem $i, int $n) => [
+            'purchase_order_item_id' => $i->id,
+            'qty' => $n === 0 ? $i->qty : intdiv($i->qty, 2),
+            'unit_price' => $i->unit_price,
+        ])->all()), now(), 'Kiriman pertama, sisanya menyusul');
+
+        Carbon::setTestNow($until->subDays(5)->setTime(11, 0));
+        $this->placeOrder($receiver, $supplierId, $pick(3, 2), $until->subDays(2), 'Belum dikirim supplier');
+
+        Carbon::setTestNow($until->subDay()->setTime(14, 0));
+        $this->placeOrder($receiver, $supplierId, $pick(5, 3), $until->addDay());
+
+        Carbon::setTestNow($until->setTime(7, 30));
+        app(SavePurchaseOrder::class)->handle(
+            $receiver,
+            ['supplier_id' => $supplierId, 'expected_at' => null, 'note' => 'Cek harga dulu'],
+            $pick(8, 2),
+        );
+    }
+
+    /** @param  list<array{product_id: int, unit_id: int, qty: int, unit_price: int}>  $lines */
+    private function placeOrder(User $user, int $supplierId, array $lines, CarbonInterface $expectedAt, ?string $note = null): PurchaseOrder
+    {
+        $draft = app(SavePurchaseOrder::class)->handle(
+            $user,
+            ['supplier_id' => $supplierId, 'expected_at' => $expectedAt->toDateString(), 'note' => $note],
+            $lines,
+        );
+
+        return app(OrderPurchaseOrder::class)->handle($draft, $user);
     }
 
     /**

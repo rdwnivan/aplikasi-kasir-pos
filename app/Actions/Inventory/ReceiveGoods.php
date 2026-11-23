@@ -6,6 +6,7 @@ use App\Enums\StockMovementType;
 use App\Models\GoodsReceipt;
 use App\Models\Product;
 use App\Models\ProductUnit;
+use App\Models\PurchaseOrder;
 use App\Models\User;
 use App\Services\Documents\DocumentNumber;
 use App\Services\Inventory\StockLedger;
@@ -15,7 +16,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Records goods arriving from a supplier (no PO). Each line may be in any of the product's
+ * Records goods arriving from a supplier, directly or against a purchase order (then through
+ * ReceivePurchaseOrder, which checks the lines against what is still outstanding). Each line may be in any of the product's
  * units (pcs / pak / dus); stock is booked in base units and the purchase price per base
  * unit re-weights the moving-average HPP.
  */
@@ -27,7 +29,7 @@ final class ReceiveGoods
     ) {}
 
     /**
-     * @param  list<array{product_id: int, unit_id: int, qty: int, unit_price: int}>  $items
+     * @param  list<array{product_id: int, unit_id: int, qty: int, unit_price: int, purchase_order_item_id?: int}>  $items
      */
     public function handle(
         User $user,
@@ -35,6 +37,7 @@ final class ReceiveGoods
         ?int $supplierId = null,
         ?CarbonInterface $receivedAt = null,
         ?string $note = null,
+        ?PurchaseOrder $purchaseOrder = null,
     ): GoodsReceipt {
         if ($items === []) {
             throw ValidationException::withMessages(['items' => 'Minimal satu barang harus diisi.']);
@@ -43,10 +46,11 @@ final class ReceiveGoods
         $receivedAt ??= now();
         $units = $this->resolveUnits($items);
 
-        return DB::transaction(function () use ($user, $items, $supplierId, $receivedAt, $note, $units) {
+        return DB::transaction(function () use ($user, $items, $supplierId, $receivedAt, $note, $units, $purchaseOrder) {
             $receipt = GoodsReceipt::create([
                 'number' => $this->numbers->next(DocumentNumber::GOODS_RECEIPT, $receivedAt),
                 'supplier_id' => $supplierId,
+                'purchase_order_id' => $purchaseOrder?->id,
                 'user_id' => $user->id,
                 'received_at' => $receivedAt,
                 'note' => $note,
@@ -60,6 +64,7 @@ final class ReceiveGoods
                 $total += $subtotal;
 
                 $receipt->items()->create([
+                    'purchase_order_item_id' => $line['purchase_order_item_id'] ?? null,
                     'product_id' => $line['product_id'],
                     'unit_id' => $line['unit_id'],
                     'qty' => $line['qty'],
@@ -96,7 +101,7 @@ final class ReceiveGoods
     /**
      * Validate every line up front so a bad line never leaves a half-posted receipt.
      *
-     * @param  list<array{product_id: int, unit_id: int, qty: int, unit_price: int}>  $items
+     * @param  list<array{product_id: int, unit_id: int, qty: int, unit_price: int, purchase_order_item_id?: int}>  $items
      * @return array<int, ProductUnit>
      */
     private function resolveUnits(array $items): array

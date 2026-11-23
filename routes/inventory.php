@@ -8,6 +8,7 @@ use App\Http\Controllers\Catalog\SupplierController;
 use App\Http\Controllers\Catalog\UnitController;
 use App\Http\Controllers\Inventory\GoodsReceiptController;
 use App\Http\Controllers\Inventory\StockOpnameController;
+use App\Http\Controllers\Purchasing\PurchaseOrderController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -38,6 +39,17 @@ Route::middleware(['auth', 'verified', 'role:'.Role::Owner->value.'|'.Role::Ware
     Route::resource('supplier', SupplierController::class)
         ->only(['index', 'store', 'update', 'destroy'])
         ->names('suppliers');
+
+    Route::resource('pesanan-pembelian', PurchaseOrderController::class)
+        ->parameters(['pesanan-pembelian' => 'purchaseOrder'])
+        ->names('purchase-orders');
+    Route::prefix('pesanan-pembelian/{purchaseOrder}')->name('purchase-orders.')->controller(PurchaseOrderController::class)->group(function () {
+        Route::post('pesan', 'order')->name('order');
+        Route::get('terima', 'receive')->name('receive');
+        Route::post('terima', 'storeReceipt')->name('receive.store');
+        Route::post('tutup', 'close')->name('close');
+        Route::post('batal', 'cancel')->name('cancel');
+    });
 
     Route::resource('penerimaan', GoodsReceiptController::class)
         ->only(['index', 'create', 'store', 'show'])

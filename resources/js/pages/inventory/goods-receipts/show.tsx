@@ -14,6 +14,7 @@ import { formatDate, formatDateTime, formatQty } from '@/lib/format';
 import { formatRupiah } from '@/lib/money';
 import goodsReceipts from '@/routes/goods-receipts';
 import products from '@/routes/products';
+import purchaseOrders from '@/routes/purchase-orders';
 
 type Receipt = {
     id: number;
@@ -21,6 +22,7 @@ type Receipt = {
     receivedAt: string;
     createdAt: string | null;
     supplier: string | null;
+    purchaseOrder: { id: number; number: string | null } | null;
     user: string;
     note: string | null;
     total: number;
@@ -49,7 +51,7 @@ export default function GoodsReceiptShow({ receipt }: { receipt: Receipt }) {
                 />
 
                 <Card className="py-4">
-                    <CardContent className="grid gap-4 px-4 text-sm sm:grid-cols-3">
+                    <CardContent className="grid gap-4 px-4 text-sm sm:grid-cols-4">
                         <Info
                             label="Tanggal terima"
                             value={formatDate(receipt.receivedAt)}
@@ -58,6 +60,21 @@ export default function GoodsReceiptShow({ receipt }: { receipt: Receipt }) {
                             label="Supplier"
                             value={receipt.supplier ?? '–'}
                         />
+                        {receipt.purchaseOrder && (
+                            <div>
+                                <p className="text-xs text-muted-foreground">
+                                    Pesanan pembelian
+                                </p>
+                                <Link
+                                    href={purchaseOrders.show(
+                                        receipt.purchaseOrder.id,
+                                    )}
+                                    className="font-medium hover:underline"
+                                >
+                                    {receipt.purchaseOrder.number}
+                                </Link>
+                            </div>
+                        )}
                         <Info label="Catatan" value={receipt.note ?? '–'} />
                     </CardContent>
                 </Card>

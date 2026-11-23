@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * @property int $id
  * @property int $goods_receipt_id
+ * @property int|null $purchase_order_item_id
  * @property int $product_id
  * @property int $unit_id
  * @property int $qty In the chosen unit.
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $unit_price Purchase price per chosen unit, Rupiah.
  * @property int $subtotal
  */
-#[Fillable(['product_id', 'unit_id', 'qty', 'conversion', 'unit_price', 'subtotal'])]
+#[Fillable(['purchase_order_item_id', 'product_id', 'unit_id', 'qty', 'conversion', 'unit_price', 'subtotal'])]
 class GoodsReceiptItem extends Model
 {
     protected function casts(): array

@@ -3,6 +3,7 @@
 use App\Enums\Role;
 use App\Models\GoodsReceipt;
 use App\Models\Product;
+use App\Models\PurchaseOrder;
 use App\Models\Sale;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
@@ -46,4 +47,20 @@ it('can be re-run without duplicating stock', function () {
 
     expect(GoodsReceipt::count())->toBe(1)
         ->and(Product::where('sku', 'MIE-001')->sole()->stock_on_hand)->toBe(200);
+});
+
+it('seeds purchase orders in every state through the real actions', function () {
+    config(['pos.demo_sales_history' => true]);
+    $this->seed(DatabaseSeeder::class);
+
+    $statuses = PurchaseOrder::query()->pluck('status')->map->value->countBy();
+
+    expect($statuses->get('received'))->toBeGreaterThan(5)
+        ->and($statuses->get('partial'))->toBe(1)
+        ->and($statuses->get('ordered'))->toBe(2)
+        ->and($statuses->get('draft'))->toBe(1)
+        ->and(PurchaseOrder::query()->get()->filter->isLate()->count())->toBe(1)
+        ->and(GoodsReceipt::query()->whereNull('purchase_order_id')->count())->toBeGreaterThan(1);
+
+    $this->artisan('stock:rebuild')->assertSuccessful();
 });

@@ -16,6 +16,8 @@ final class DocumentNumber
 
     public const STOCK_OPNAME = 'SO';
 
+    public const PURCHASE_ORDER = 'PO';
+
     public const SALE = 'INV';
 
     public const SALE_RETURN = 'RET';

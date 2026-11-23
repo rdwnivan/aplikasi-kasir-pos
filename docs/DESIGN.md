@@ -80,7 +80,7 @@ Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permi
 
 ## 6. Di luar v1 (roadmap)
 
-- Purchase Order + penerimaan parsial
+- ~~Purchase Order + penerimaan parsial~~ → selesai di v2, lihat §10
 - Batch & tanggal kedaluwarsa
 - Pembayaran campuran (split payment)
 - Kasbon / piutang pelanggan
@@ -169,7 +169,7 @@ Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permi
 
 - Container app menjalankan skrip first-boot `docker/sail-start.sh`: membuat `.env` dari `.env.example` bila belum ada, membuat `APP_KEY`, menjalankan `npm ci` dan `npm run build` bila belum ada build, lalu `artisan serve` di port 80.
 
-## 10. v2: Purchase Order + penerimaan parsial (rancangan, 2026-11-23)
+## 10. v2: Purchase Order + penerimaan parsial (2026-11-23)
 
 Tujuan: toko bisa mencatat **apa yang sudah dipesan ke supplier dan apa yang masih ditunggu**, lalu menerima barangnya bertahap. Penerimaan langsung tanpa PO (§5) tetap ada untuk belanja dadakan.
 
@@ -192,7 +192,8 @@ Tujuan: toko bisa mencatat **apa yang sudah dipesan ke supplier dan apa yang mas
 | `expected_at` (date, null)  | perkiraan barang datang; dipakai untuk menandai PO terlambat                                      |
 | `ordered_at`, `finished_at` | timestamp saat dipesan dan saat selesai / ditutup / dibatalkan                                    |
 | `total`                     | integer Rupiah, Σ subtotal baris pesanan                                                          |
-| `note`                      | catatan; alasan wajib diisi saat menutup sisa pesanan atau membatalkan                            |
+| `note`                      | catatan bebas                                                                                     |
+| `close_reason`              | alasan, wajib saat menutup sisa pesanan atau membatalkan                                          |
 
 `purchase_order_items`: `purchase_order_id` (cascade), `product_id`, `unit_id` (satuan beli, mis. dus), `qty` (dalam satuan itu), `unit_price` (integer Rupiah per satuan itu), `subtotal`. Satu produk + satuan hanya boleh muncul sekali per PO.
 
@@ -226,7 +227,7 @@ draft ──Pesan──▶ ordered ──terima sebagian──▶ partial ──
 | URL                                 | Isi                                                                                    |
 | ----------------------------------- | -------------------------------------------------------------------------------------- |
 | `GET /pesanan-pembelian`            | daftar PO: filter status & supplier, progres terima (mis. 12/20 dus), tanda terlambat  |
-| `GET /pesanan-pembelian/buat`       | form draft; `?dari=stok-minimum` mengisi baris dari produk di bawah stok minimum       |
+| `GET /pesanan-pembelian/baru`       | form draft; `?dari=stok-minimum` mengisi baris dari produk di bawah stok minimum       |
 | `GET /pesanan-pembelian/{po}`       | detail: baris, dipesan / diterima / sisa, daftar GR terkait, tombol aksi sesuai status |
 | `…/{po}/ubah`, `PUT`, `DELETE`      | ubah / hapus draft                                                                     |
 | `POST …/{po}/pesan`                 | draft → ordered                                                                        |
@@ -235,7 +236,7 @@ draft ──Pesan──▶ ordered ──terima sebagian──▶ partial ──
 
 - Nama route `purchase-orders.*`, dipanggil dari frontend lewat Wayfinder. Menu sidebar "Pesanan pembelian" di atas "Penerimaan barang".
 - Detail GR menampilkan tautan ke PO-nya, dan daftar GR bisa difilter "dari PO / tanpa PO".
-- **Isi dari stok minimum**: setiap produk dengan `stock_on_hand < min_stock` menjadi satu baris; satuan = satuan GR terakhir produk itu (atau satuan dasar), qty = cukup untuk mencapai **2 × stok minimum**, dibulatkan ke atas dalam satuan itu. Pengguna tinggal menghapus baris yang bukan untuk supplier ini. Kartu stok minimum di dashboard mendapat tombol "Buat PO".
+- **Isi dari stok minimum**: setiap produk aktif dengan `stock_on_hand ≤ min_stock` (definisi yang sama dengan kartu stok menipis) menjadi satu baris, urut nama; satuan = satuan GR terakhir produk itu (atau satuan dasar), qty = cukup untuk mencapai **2 × stok minimum**, dibulatkan ke atas dalam satuan itu. Pengguna tinggal menghapus baris yang bukan untuk supplier ini. Kartu stok minimum di dashboard mendapat tombol "Buat PO".
 
 ### 10.6 Dampak ke laporan
 

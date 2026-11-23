@@ -13,12 +13,13 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property string $number
  * @property int|null $supplier_id
+ * @property int|null $purchase_order_id
  * @property int $user_id
  * @property Carbon $received_at
  * @property int $total Rupiah
  * @property string|null $note
  */
-#[Fillable(['number', 'supplier_id', 'user_id', 'received_at', 'total', 'note'])]
+#[Fillable(['number', 'supplier_id', 'purchase_order_id', 'user_id', 'received_at', 'total', 'note'])]
 class GoodsReceipt extends Model
 {
     protected function casts(): array
@@ -39,6 +40,12 @@ class GoodsReceipt extends Model
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class);
+    }
+
+    /** @return BelongsTo<PurchaseOrder, $this> */
+    public function purchaseOrder(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseOrder::class);
     }
 
     /** @return BelongsTo<User, $this> */

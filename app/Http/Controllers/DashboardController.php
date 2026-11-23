@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\Role;
 use App\Queries\LowStock;
+use App\Queries\OpenPurchaseOrders;
 use App\Reports\InventoryValuation;
 use App\Reports\SalesSummary;
 use App\Reports\TopProducts;
@@ -35,6 +36,7 @@ class DashboardController extends Controller
                 'count' => LowStock::count(),
                 'items' => LowStock::list(8),
             ] : null,
+            'openOrders' => $canManageStock ? OpenPurchaseOrders::summary() : null,
             'overview' => $isOwner ? self::overview() : null,
         ]);
     }

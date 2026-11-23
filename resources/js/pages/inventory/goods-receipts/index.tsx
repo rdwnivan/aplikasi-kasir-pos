@@ -29,6 +29,7 @@ type ReceiptRow = {
     number: string;
     receivedAt: string;
     supplier: string | null;
+    purchaseOrder: string | null;
     user: string;
     itemsCount: number;
     total: number;
@@ -40,7 +41,12 @@ export default function GoodsReceiptIndex({
     suppliers,
 }: {
     receipts: Paginated<ReceiptRow>;
-    filters: { from: string; to: string; supplier: number | null };
+    filters: {
+        from: string;
+        to: string;
+        supplier: number | null;
+        source: 'po' | 'langsung' | null;
+    };
     suppliers: Option[];
 }) {
     return (
@@ -64,7 +70,10 @@ export default function GoodsReceiptIndex({
                         url={goodsReceipts.index.url()}
                         from={filters.from}
                         to={filters.to}
-                        extra={{ supplier: filters.supplier ?? undefined }}
+                        extra={{
+                            supplier: filters.supplier ?? undefined,
+                            asal: filters.source ?? undefined,
+                        }}
                     />
                     <Select
                         value={
@@ -77,6 +86,7 @@ export default function GoodsReceiptIndex({
                                     from: filters.from,
                                     to: filters.to,
                                     supplier: v === 'all' ? undefined : v,
+                                    asal: filters.source ?? undefined,
                                 },
                                 { preserveState: true, replace: true },
                             )
@@ -92,6 +102,33 @@ export default function GoodsReceiptIndex({
                                     {s.name}
                                 </SelectItem>
                             ))}
+                        </SelectContent>
+                    </Select>
+                    <Select
+                        value={filters.source ?? 'all'}
+                        onValueChange={(v) =>
+                            router.get(
+                                goodsReceipts.index.url(),
+                                {
+                                    from: filters.from,
+                                    to: filters.to,
+                                    supplier: filters.supplier ?? undefined,
+                                    asal: v === 'all' ? undefined : v,
+                                },
+                                { preserveState: true, replace: true },
+                            )
+                        }
+                    >
+                        <SelectTrigger
+                            className="w-full sm:w-44"
+                            aria-label="Asal penerimaan"
+                        >
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Semua asal</SelectItem>
+                            <SelectItem value="po">Dari PO</SelectItem>
+                            <SelectItem value="langsung">Tanpa PO</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -139,6 +176,11 @@ export default function GoodsReceiptIndex({
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">
                                         {r.supplier ?? '–'}
+                                        {r.purchaseOrder && (
+                                            <div className="text-xs">
+                                                {r.purchaseOrder}
+                                            </div>
+                                        )}
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
                                         {r.itemsCount}

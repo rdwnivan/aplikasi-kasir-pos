@@ -45,6 +45,9 @@ class SupplierController extends Controller
     /** A supplier on a goods receipt stays, so the receipt keeps saying who delivered. */
     public function destroy(Supplier $supplier): RedirectResponse
     {
+        if ($supplier->purchaseOrders()->exists()) {
+            throw ValidationException::withMessages(['supplier' => "Supplier {$supplier->name} sudah dipakai di pesanan pembelian, tidak bisa dihapus."]);
+        }
         if ($supplier->goodsReceipts()->exists()) {
             throw ValidationException::withMessages(['supplier' => "Supplier {$supplier->name} sudah dipakai di penerimaan barang, tidak bisa dihapus."]);
         }

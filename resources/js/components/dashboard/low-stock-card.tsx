@@ -9,8 +9,8 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { formatQty } from '@/lib/format';
-import goodsReceipts from '@/routes/goods-receipts';
 import products from '@/routes/products';
+import purchaseOrders from '@/routes/purchase-orders';
 
 export type LowStockItem = {
     id: number;
@@ -48,7 +48,13 @@ export function LowStockCard({
                 </div>
                 {count > 0 && (
                     <Button size="sm" variant="outline" asChild>
-                        <Link href={goodsReceipts.create()}>Terima barang</Link>
+                        <Link
+                            href={purchaseOrders.create({
+                                query: { dari: 'stok-minimum' },
+                            })}
+                        >
+                            Buat PO
+                        </Link>
                     </Button>
                 )}
             </CardHeader>

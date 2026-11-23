@@ -112,49 +112,5 @@ it('lets two concurrent checkouts both succeed when there is enough stock', func
 /** @return array{handle: resource, pipes: array<int, resource>} */
 function startCheckoutProcess(int $userId, int $unitId): array
 {
-    $db = config('database.connections.pgsql');
-    $env = array_merge(getenv(), [
-        'APP_ENV' => 'testing',
-        'DB_CONNECTION' => 'pgsql',
-        'DB_HOST' => (string) $db['host'],
-        'DB_PORT' => (string) $db['port'],
-        'DB_DATABASE' => (string) $db['database'],
-        'DB_USERNAME' => (string) $db['username'],
-        'DB_PASSWORD' => (string) $db['password'],
-    ]);
-
-    $handle = proc_open(
-        [PHP_BINARY, base_path('tests/Support/concurrent_checkout.php'), (string) $userId, (string) $unitId],
-        [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
-        $pipes,
-        base_path(),
-        $env,
-    );
-
-    if (! is_resource($handle)) {
-        throw new RuntimeException('Could not start the second checkout process.');
-    }
-
-    return ['handle' => $handle, 'pipes' => $pipes];
-}
-
-/**
- * @param  array{handle: resource, pipes: array<int, resource>}  $process
- * @return array<string, mixed>
- */
-function finishProcess(array $process): array
-{
-    $out = stream_get_contents($process['pipes'][1]);
-    $err = stream_get_contents($process['pipes'][2]);
-    fclose($process['pipes'][1]);
-    fclose($process['pipes'][2]);
-    proc_close($process['handle']);
-
-    $decoded = json_decode((string) $out, true);
-
-    if (! is_array($decoded)) {
-        throw new RuntimeException("Checkout process said: {$out}\n{$err}");
-    }
-
-    return $decoded;
+    return startPhpProcess('concurrent_checkout.php', [(string) $userId, (string) $unitId]);
 }

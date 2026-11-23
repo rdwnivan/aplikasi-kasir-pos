@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__.'/Support/processes.php';
+
 use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;

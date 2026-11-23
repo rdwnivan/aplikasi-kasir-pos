@@ -21,12 +21,15 @@ class GoodsReceiptController extends Controller
     {
         $range = DateRange::fromRequest($request, defaultDays: 30);
         $supplierId = $request->integer('supplier') ?: null;
+        $source = in_array($request->query('asal'), ['po', 'langsung'], true) ? (string) $request->query('asal') : null;
 
         $receipts = GoodsReceipt::query()
-            ->with(['supplier', 'user'])
+            ->with(['supplier', 'user', 'purchaseOrder'])
             ->withCount('items')
             ->whereBetween('received_at', [$range->from->toDateString(), $range->to->toDateString()])
             ->when($supplierId, fn (Builder $q, int $id) => $q->where('supplier_id', $id))
+            ->when($source === 'po', fn (Builder $q) => $q->whereNotNull('purchase_order_id'))
+            ->when($source === 'langsung', fn (Builder $q) => $q->whereNull('purchase_order_id'))
             ->orderByDesc('received_at')
             ->orderByDesc('id')
             ->paginate(20)
@@ -36,6 +39,7 @@ class GoodsReceiptController extends Controller
                 'number' => $r->number,
                 'receivedAt' => $r->received_at->toDateString(),
                 'supplier' => $r->supplier?->name,
+                'purchaseOrder' => $r->purchaseOrder?->number,
                 'user' => $r->user->name,
                 'itemsCount' => $r->items_count,
                 'total' => $r->total,
@@ -43,7 +47,7 @@ class GoodsReceiptController extends Controller
 
         return Inertia::render('inventory/goods-receipts/index', [
             'receipts' => $receipts,
-            'filters' => [...$range->toArray(), 'supplier' => $supplierId],
+            'filters' => [...$range->toArray(), 'supplier' => $supplierId, 'source' => $source],
             'suppliers' => Supplier::query()->orderBy('name')->get(['id', 'name']),
         ]);
     }
@@ -74,7 +78,7 @@ class GoodsReceiptController extends Controller
 
     public function show(GoodsReceipt $goodsReceipt): Response
     {
-        $goodsReceipt->load(['supplier', 'user', 'items' => fn ($q) => $q->with(['product' => fn ($p) => $p->withTrashed()->with('baseUnit'), 'unit'])]);
+        $goodsReceipt->load(['supplier', 'user', 'purchaseOrder', 'items' => fn ($q) => $q->with(['product' => fn ($p) => $p->withTrashed()->with('baseUnit'), 'unit'])]);
 
         return Inertia::render('inventory/goods-receipts/show', [
             'receipt' => [
@@ -83,6 +87,10 @@ class GoodsReceiptController extends Controller
                 'receivedAt' => $goodsReceipt->received_at->toDateString(),
                 'createdAt' => $goodsReceipt->created_at?->toIso8601String(),
                 'supplier' => $goodsReceipt->supplier?->name,
+                'purchaseOrder' => $goodsReceipt->purchaseOrder === null ? null : [
+                    'id' => $goodsReceipt->purchaseOrder->id,
+                    'number' => $goodsReceipt->purchaseOrder->number,
+                ],
                 'user' => $goodsReceipt->user->name,
                 'note' => $goodsReceipt->note,
                 'total' => $goodsReceipt->total,
