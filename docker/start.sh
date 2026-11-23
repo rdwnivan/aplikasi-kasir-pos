@@ -19,7 +19,7 @@ if [ -z "${APP_URL:-}" ]; then
 fi
 
 # Autoscaling hosts (Vercel) may boot several instances at once; set MIGRATE_ON_BOOT=false
-# there and migrate from CI instead (.github/workflows/demo-db.yml).
+# there and migrate from CI instead (.github/workflows/demo-db.yml, which also deploys).
 if [ "${MIGRATE_ON_BOOT:-true}" = "true" ]; then
     php artisan migrate --force --no-interaction
 fi

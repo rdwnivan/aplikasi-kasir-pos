@@ -1,14 +1,22 @@
 name: demo-db
 
-# Database of the public demo (Neon), which the app itself doesn't touch at boot on Vercel
-# (MIGRATE_ON_BOOT=false): several instances may start at once there.
+# Database and deploy of the public demo (Vercel + Neon). Vercel does not deploy on push
+# (vercel.json: git.deploymentEnabled = false) and the app does not migrate at boot there
+# (MIGRATE_ON_BOOT=false: several instances may start at once). This workflow does both, in
+# order, so new code never goes live before its schema:
 #
-# - After every green tests run on a push to main: `migrate --force`.
-# - By hand with mode=reset: rebuild the demo data. It is seeded into a throwaway PostgreSQL
-#   on the runner (thousands of small queries, fast locally) and copied to Neon in one
-#   pg_dump. This REPLACES everything in the demo database.
+#   tests (green, push to main) -> migrate the demo DB -> deploy that same commit to production
 #
-# Needs the DEMO_DB_URL secret (Neon connection string). Without it the job is skipped.
+# - Red or cancelled tests: nothing runs. Failed migration: the deploy job is skipped.
+# - Pull requests and other branches never reach this workflow's jobs (event and ref checks).
+# - By hand (from main only):
+#   - mode=migrate: migrate, then deploy main's current commit (also a manual redeploy).
+#   - mode=reset: rebuild the demo data. It is seeded into a throwaway PostgreSQL on the
+#     runner (thousands of small queries, fast locally) and copied to Neon in one pg_dump.
+#     This REPLACES everything in the demo database. It does not deploy.
+#
+# Secrets: DEMO_DB_URL (Neon connection string; without it the database job is a no-op and
+# nothing is deployed) and VERCEL_TOKEN (Vercel access token; the deploy job fails without it).
 
 on:
   workflow_run:
@@ -18,13 +26,14 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'migrate, or reset (wipes the demo DB and reseeds 30 days of demo data)'
+        description: 'migrate (then deploy main), or reset (wipes the demo DB and reseeds 30 days of demo data)'
         type: choice
         options: [migrate, reset]
         default: migrate
 
 permissions:
   contents: read
+  actions: read # manual runs check that tests passed on the commit
 
 concurrency:
   group: demo-db
@@ -32,14 +41,21 @@ concurrency:
 
 env:
   PHP_VERSION: '8.5'
+  # The commit that was tested (workflow_run) or main's tip (manual run from main).
+  DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
   database:
     name: Demo database (${{ inputs.mode || 'migrate' }})
     runs-on: ubuntu-latest
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
+    outputs:
+      migrated: ${{ steps.migrate.outcome == 'success' }}
 
     services:
       postgres:
@@ -63,17 +79,29 @@ jobs:
           DEMO_DB_URL: ${{ secrets.DEMO_DB_URL }}
         run: |
           if [ -z "$DEMO_DB_URL" ]; then
-            echo "DEMO_DB_URL is not set; nothing to do."
+            echo "DEMO_DB_URL is not set; nothing to migrate and nothing will be deployed."
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # workflow_run only fires on green tests; a manual run must not ship an untested commit.
+      - name: Require green tests (manual run)
+        if: steps.config.outputs.enabled == 'true' && github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          conclusion=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow tests --commit "$DEPLOY_SHA"             --event push --json conclusion --jq 'map(select(.conclusion == "success")) | length')
+          if [ "$conclusion" = "0" ]; then
+            echo "::error::No green tests run on push for $DEPLOY_SHA; refusing to touch the demo."
+            exit 1
           fi
 
       - name: Checkout code
         if: steps.config.outputs.enabled == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ env.DEPLOY_SHA }}
           persist-credentials: false
 
       - name: Setup PHP
@@ -93,6 +121,7 @@ jobs:
           php artisan key:generate --ansi
 
       - name: Migrate the demo database
+        id: migrate
         if: steps.config.outputs.enabled == 'true' && (inputs.mode || 'migrate') == 'migrate'
         env:
           APP_ENV: production
@@ -122,3 +151,50 @@ jobs:
             pg_dump -h 127.0.0.1 -U postgres --no-owner --no-privileges --clean --if-exists kasir_demo \
             | docker run --rm -i -e DEMO_DB_URL postgres:17 \
               sh -c 'psql "$DEMO_DB_URL" --quiet -v ON_ERROR_STOP=1'
+
+  # Runs only after a successful migration of this same commit. Vercel builds the Dockerfile
+  # remotely from the uploaded checkout (Container runtime; no --prebuilt).
+  deploy:
+    name: Deploy to Vercel (production)
+    needs: database
+    if: needs.database.outputs.migrated == 'true'
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: team_FBvgrFHH7FLnaXBu2qCXuomo
+      VERCEL_PROJECT_ID: prj_5T0kMyw06s0wRtUVdVxvVOCWCyGH
+      VERCEL_CLI: vercel@65.12.1
+
+    steps:
+      - name: Check configuration
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN is not set: the database is migrated but $DEPLOY_SHA is NOT deployed."
+            exit 1
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+          persist-credentials: false
+
+      - name: Deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          url=$(npx --yes "$VERCEL_CLI" deploy --prod --yes --token "$VERCEL_TOKEN" \
+            --meta githubCommitSha="$DEPLOY_SHA")
+          echo "Deployed $DEPLOY_SHA: $url"
+
+      - name: Health check
+        run: |
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' https://aplikasi-kasir-pos-fawn.vercel.app/up || true)
+            echo "GET /up -> $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 10
+          done
+          echo "::error::/up did not return 200"
+          exit 1
