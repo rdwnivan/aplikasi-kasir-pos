@@ -2,7 +2,6 @@
 
 namespace App\Reports;
 
-use App\Enums\PaymentMethod;
 use App\Enums\SaleStatus;
 use App\Support\DateRange;
 use Illuminate\Support\Facades\DB;
@@ -35,8 +34,8 @@ final class SalesSummary
             ->selectRaw('SUM(total) AS gross')
             ->selectRaw('SUM(tax_amount) AS tax')
             ->selectRaw('SUM(cogs_total) AS cogs')
-            ->selectRaw('SUM(CASE WHEN payment_method = ? THEN total ELSE 0 END) AS cash', [PaymentMethod::Cash->value])
-            ->selectRaw('SUM(CASE WHEN payment_method = ? THEN total ELSE 0 END) AS qris', [PaymentMethod::Qris->value])
+            ->selectRaw('SUM('.Sql::cashPart().') AS cash')
+            ->selectRaw('SUM('.Sql::qrisPart().') AS qris')
             ->get()
             ->keyBy('bucket');
 

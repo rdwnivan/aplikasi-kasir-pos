@@ -132,8 +132,15 @@ export function QrisDialog({ payment, onPaid }: Props) {
                                 {payment.number}
                             </DialogDescription>
                             <div className="text-3xl font-bold tracking-tight tabular-nums">
-                                {formatRupiah(payment.total)}
+                                {formatRupiah(payment.amount)}
                             </div>
+                            {payment.cashAmount > 0 && (
+                                <p className="text-sm text-muted-foreground">
+                                    Total {formatRupiah(payment.total)} · tunai{' '}
+                                    {formatRupiah(payment.cashAmount)} sudah
+                                    diterima
+                                </p>
+                            )}
                         </DialogHeader>
 
                         {status === 'cancelled' ? (
@@ -142,6 +149,13 @@ export function QrisDialog({ payment, onPaid }: Props) {
                                 QRIS kedaluwarsa atau dibatalkan. Keranjang
                                 masih ada; pilih cara bayar lain atau buat QRIS
                                 baru.
+                                {payment.cashAmount > 0 && (
+                                    <p className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 font-medium">
+                                        Kembalikan uang tunai{' '}
+                                        {formatRupiah(payment.cashAmount)} ke
+                                        pelanggan.
+                                    </p>
+                                )}
                             </div>
                         ) : (
                             <>

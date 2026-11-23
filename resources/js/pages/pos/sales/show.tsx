@@ -56,6 +56,8 @@ type Sale = {
     paymentMethod: string | null;
     paidAmount: number | null;
     changeAmount: number | null;
+    cashAmount: number;
+    qrisAmount: number;
     items: Item[];
     returns: {
         id: number;
@@ -202,11 +204,24 @@ export default function SaleShow({
                             />
                         )}
                         <Line label="Total" value={sale.total} strong />
-                        {sale.paymentMethod && (
-                            <Line
-                                label={`Dibayar (${paymentLabels[sale.paymentMethod] ?? sale.paymentMethod})`}
-                                value={sale.paidAmount ?? sale.total}
-                            />
+                        {sale.paymentMethod === 'split' ? (
+                            <>
+                                <Line
+                                    label="Dibayar tunai"
+                                    value={sale.cashAmount}
+                                />
+                                <Line
+                                    label="Dibayar QRIS"
+                                    value={sale.qrisAmount}
+                                />
+                            </>
+                        ) : (
+                            sale.paymentMethod && (
+                                <Line
+                                    label={`Dibayar (${paymentLabels[sale.paymentMethod] ?? sale.paymentMethod})`}
+                                    value={sale.paidAmount ?? sale.total}
+                                />
+                            )
                         )}
                         {sale.changeAmount !== null &&
                             sale.changeAmount > 0 && (

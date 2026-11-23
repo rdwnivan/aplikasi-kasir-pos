@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * QRIS checkout, step one: write the sale as pending_payment (numbered, priced, items and
+ * QRIS checkout (whole, or the rest after a cash part: DESIGN.md §11), step one: write the sale as pending_payment (numbered, priced, items and
  * tax snapshot, but no stock movement) and ask Midtrans for a QR code. Stock moves only when
  * the payment settles (QrisPayments::settle).
  *
@@ -44,6 +44,7 @@ final class StartQrisPayment
         ?DiscountType $discountType = null,
         int $discountValue = 0,
         ?Sale $fromHeld = null,
+        ?int $cashAmount = null,
     ): Sale {
         if (! $this->midtrans->isConfigured()) {
             throw ValidationException::withMessages(['payment' => 'QRIS belum aktif: isi MIDTRANS_SERVER_KEY di file .env.']);
@@ -56,13 +57,20 @@ final class StartQrisPayment
             throw ValidationException::withMessages(['payment' => 'Total nol tidak bisa dibayar dengan QRIS.']);
         }
 
+        // Mixed payment: the cashier has already taken this much in cash; QRIS pays the rest.
+        if ($cashAmount !== null && ($cashAmount < 1 || $cashAmount >= $cart->priced->total)) {
+            throw ValidationException::withMessages([
+                'cash_amount' => 'Bagian tunai harus lebih dari Rp 0 dan kurang dari total belanja.',
+            ]);
+        }
+
         $this->ensureStock($cart->units, $cart->lines);
 
         if (Sale::query()->where('shift_id', $shift->id)->where('status', SaleStatus::PendingPayment)->exists()) {
             throw ValidationException::withMessages(['payment' => 'Masih ada QRIS yang menunggu pembayaran. Selesaikan atau batalkan dulu.']);
         }
 
-        $sale = DB::transaction(function () use ($cashier, $shift, $cart, $fromHeld) {
+        $sale = DB::transaction(function () use ($cashier, $shift, $cart, $fromHeld, $cashAmount) {
             if ($fromHeld !== null) {
                 DiscardHeldSale::deleteLocked($fromHeld, $cashier);
             }
@@ -73,7 +81,8 @@ final class StartQrisPayment
                 'user_id' => $cashier->id,
                 'status' => SaleStatus::PendingPayment,
                 ...$cart->saleAttributes(),
-                'payment_method' => PaymentMethod::Qris,
+                'payment_method' => $cashAmount === null ? PaymentMethod::Qris : PaymentMethod::Split,
+                'split_cash_amount' => $cashAmount,
             ]);
             $cart->writeItems($sale);
 
@@ -81,7 +90,7 @@ final class StartQrisPayment
         });
 
         try {
-            $charge = $this->midtrans->chargeQris((string) $sale->number, $sale->total);
+            $charge = $this->midtrans->chargeQris((string) $sale->number, $sale->qrisPart());
         } catch (MidtransException $e) {
             $sale->forceFill(['status' => SaleStatus::Cancelled])->save();
 

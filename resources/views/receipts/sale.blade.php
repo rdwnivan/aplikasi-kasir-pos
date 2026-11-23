@@ -79,7 +79,13 @@
             <tr><td>PPN</td><td class="r">{{ $rp($sale->tax_amount) }}</td></tr>
         @endif
         <tr class="b big"><td>TOTAL</td><td class="r">{{ $rp($sale->total) }}</td></tr>
-        @if ($sale->payment_method?->value === 'qris')
+        @if ($sale->payment_method?->value === 'split')
+            <tr><td>Tunai</td><td class="r">{{ $rp($sale->cashPart()) }}</td></tr>
+            <tr><td>QRIS</td><td class="r">{{ $rp($sale->qrisPart()) }}</td></tr>
+            @if ($sale->payment_reference)
+                <tr class="muted"><td colspan="2">Ref {{ $sale->payment_reference }}</td></tr>
+            @endif
+        @elseif ($sale->payment_method?->value === 'qris')
             <tr><td>QRIS</td><td class="r">{{ $rp($sale->paid_amount ?? $sale->total) }}</td></tr>
             @if ($sale->payment_reference)
                 <tr class="muted"><td colspan="2">Ref {{ $sale->payment_reference }}</td></tr>

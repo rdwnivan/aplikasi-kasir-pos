@@ -269,20 +269,27 @@ export default function PosIndex({
         );
     }
 
-    function startQris() {
+    function startQris(cashAmount?: number) {
         setPayError(undefined);
-        router.post(pos.qris.store.url(), payload(), {
-            preserveScroll: true,
-            onStart: () => setProcessing(true),
-            onFinish: () => setProcessing(false),
-            onSuccess: () => {
-                setDialog(null);
-                // A held cart was turned into the QRIS sale; it no longer exists as held.
-                setHeldId(null);
-                setHeldLabel('');
+        router.post(
+            pos.qris.store.url(),
+            {
+                ...payload(),
+                ...(cashAmount ? { cash_amount: cashAmount } : {}),
             },
-            onError: (errors) => setPayError(firstError(errors)),
-        });
+            {
+                preserveScroll: true,
+                onStart: () => setProcessing(true),
+                onFinish: () => setProcessing(false),
+                onSuccess: () => {
+                    setDialog(null);
+                    // A held cart was turned into the QRIS sale; it no longer exists as held.
+                    setHeldId(null);
+                    setHeldLabel('');
+                },
+                onError: (errors) => setPayError(firstError(errors)),
+            },
+        );
     }
 
     const onQrisPaid = useCallback(() => {

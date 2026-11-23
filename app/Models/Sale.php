@@ -29,6 +29,7 @@ use Illuminate\Support\Carbon;
  * @property int $tax_amount
  * @property int $total
  * @property PaymentMethod|null $payment_method
+ * @property int|null $split_cash_amount Cash part of a `split` payment; null otherwise.
  * @property int|null $paid_amount
  * @property int|null $change_amount
  * @property string $cogs_total
@@ -57,9 +58,29 @@ class Sale extends Model
             'payment_checked_at' => 'datetime',
             ...array_fill_keys([
                 'subtotal', 'discount_value', 'discount_amount', 'taxable_amount', 'dpp_amount',
-                'tax_amount', 'total', 'paid_amount', 'change_amount',
+                'tax_amount', 'total', 'paid_amount', 'change_amount', 'split_cash_amount',
             ], 'integer'),
         ];
+    }
+
+    /** What went into the drawer: the whole total for cash, the cash part for split. */
+    public function cashPart(): int
+    {
+        return match ($this->payment_method) {
+            PaymentMethod::Cash => $this->total,
+            PaymentMethod::Split => (int) $this->split_cash_amount,
+            default => 0,
+        };
+    }
+
+    /** What is (or was to be) paid through Midtrans. */
+    public function qrisPart(): int
+    {
+        return match ($this->payment_method) {
+            PaymentMethod::Qris => $this->total,
+            PaymentMethod::Split => $this->total - (int) $this->split_cash_amount,
+            default => 0,
+        };
     }
 
     /** @return HasMany<SaleItem, $this> */

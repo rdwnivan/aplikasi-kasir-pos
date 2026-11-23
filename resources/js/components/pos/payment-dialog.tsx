@@ -1,4 +1,4 @@
-import { Banknote, QrCode } from 'lucide-react';
+import { Banknote, QrCode, SplitSquareHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { useOpenKey } from '@/hooks/use-open-key';
 import { Kbd } from '@/components/pos/kbd';
@@ -24,8 +24,11 @@ type Props = {
     qrisEnabled: boolean;
     onOpenChange: (open: boolean) => void;
     onPay: (paid: number) => void;
-    onQris: () => void;
+    /** Without an amount: QRIS for the whole total. With one: that much cash, QRIS for the rest. */
+    onQris: (cashAmount?: number) => void;
 };
+
+type Method = 'cash' | 'qris' | 'split';
 
 export function PaymentDialog(props: Props) {
     const key = useOpenKey(props.open);
@@ -40,7 +43,7 @@ export function PaymentDialog(props: Props) {
 }
 
 function PaymentForm(props: Props) {
-    const [method, setMethod] = useState<'cash' | 'qris'>('cash');
+    const [method, setMethod] = useState<Method>('cash');
 
     return (
         <div className="space-y-5">
@@ -49,7 +52,7 @@ function PaymentForm(props: Props) {
                 variant="outline"
                 className="w-full"
                 value={method}
-                onValueChange={(v) => v && setMethod(v as 'cash' | 'qris')}
+                onValueChange={(v) => v && setMethod(v as Method)}
             >
                 <ToggleGroupItem value="cash" className="flex-1">
                     <Banknote /> Tunai
@@ -57,12 +60,13 @@ function PaymentForm(props: Props) {
                 <ToggleGroupItem value="qris" className="flex-1">
                     <QrCode /> QRIS
                 </ToggleGroupItem>
+                <ToggleGroupItem value="split" className="flex-1">
+                    <SplitSquareHorizontal /> Tunai + QRIS
+                </ToggleGroupItem>
             </ToggleGroup>
-            {method === 'cash' ? (
-                <CashForm {...props} />
-            ) : (
-                <QrisForm {...props} />
-            )}
+            {method === 'cash' && <CashForm {...props} />}
+            {method === 'qris' && <QrisForm {...props} />}
+            {method === 'split' && <SplitForm {...props} />}
         </div>
     );
 }
@@ -94,11 +98,93 @@ function QrisForm({ total, processing, error, qrisEnabled, onQris }: Props) {
                 size="lg"
                 className="w-full"
                 disabled={!qrisEnabled || processing}
-                onClick={onQris}
+                onClick={() => onQris()}
             >
                 <QrCode /> {processing ? 'Membuat QRIS…' : 'Tampilkan QRIS'}
             </Button>
         </div>
+    );
+}
+
+/** Part cash (taken first, exact amount), the rest by QRIS. DESIGN.md §11. */
+function SplitForm({ total, processing, error, qrisEnabled, onQris }: Props) {
+    const [cash, setCash] = useState(0);
+    const rest = total - cash;
+    const valid = cash > 0 && cash < total;
+
+    return (
+        <form
+            className="space-y-5"
+            onSubmit={(e) => {
+                e.preventDefault();
+                if (valid && qrisEnabled && !processing) {
+                    onQris(cash);
+                }
+            }}
+        >
+            <DialogHeader>
+                <DialogTitle>Tunai + QRIS</DialogTitle>
+                <DialogDescription>Total belanja</DialogDescription>
+                <div className="text-4xl font-bold tracking-tight tabular-nums">
+                    {formatRupiah(total)}
+                </div>
+            </DialogHeader>
+
+            <div className="grid gap-2">
+                <Label htmlFor="split-cash">Tunai diterima</Label>
+                <RupiahInput
+                    id="split-cash"
+                    autoFocus
+                    className="h-12 text-xl"
+                    value={cash}
+                    onValueChange={setCash}
+                />
+                <p className="text-sm text-muted-foreground">
+                    Terima uang tunai dengan jumlah pas (tanpa kembalian)
+                    sebelum menampilkan QRIS. Kalau QRIS batal, uang ini
+                    dikembalikan.
+                </p>
+            </div>
+
+            <div
+                className={cn(
+                    'flex items-baseline justify-between rounded-lg border p-3',
+                    cash === 0
+                        ? 'text-muted-foreground'
+                        : valid
+                          ? 'border-emerald-500/40 bg-emerald-500/10'
+                          : 'border-destructive/40 bg-destructive/10',
+                )}
+            >
+                <span className="text-sm">
+                    {cash >= total
+                        ? 'Tunai harus kurang dari total'
+                        : 'Sisa lewat QRIS'}
+                </span>
+                <span className="text-2xl font-semibold tabular-nums">
+                    {formatRupiah(Math.max(0, rest))}
+                </span>
+            </div>
+
+            {!qrisEnabled && (
+                <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                    QRIS belum aktif. Isi MIDTRANS_SERVER_KEY di file .env.
+                </p>
+            )}
+            {error && <p className="text-sm text-destructive">{error}</p>}
+
+            <Button
+                type="submit"
+                size="lg"
+                className="w-full"
+                disabled={!valid || !qrisEnabled || processing}
+            >
+                <QrCode />
+                {processing
+                    ? 'Membuat QRIS…'
+                    : `Tampilkan QRIS ${valid ? formatRupiah(rest) : ''}`.trim()}
+            </Button>
+        </form>
     );
 }
 

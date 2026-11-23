@@ -13,7 +13,10 @@ use App\Models\Sale;
 use App\Models\StockMovement;
 use App\Models\Unit;
 use App\Models\User;
+use App\Reports\SalesSummary;
+use App\Reports\ShiftRecap;
 use App\Services\Inventory\StockLedger;
+use App\Support\DateRange;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Carbon;
@@ -340,4 +343,153 @@ it('keeps other cashiers away from someone else’s QR', function () {
 
     $this->actingAs($other)->getJson(route('pos.qris.show', $sale))->assertForbidden();
     $this->actingAs($other)->post(route('pos.qris.cancel', $sale))->assertForbidden();
+});
+
+// --- Mixed cash + QRIS (DESIGN.md §11) -------------------------------------------------------
+
+function startSplit(int $cash): Sale
+{
+    test()->actingAs(test()->cashier)
+        ->post(route('pos.qris.store'), [
+            'items' => [['product_unit_id' => test()->unit->id, 'qty' => 3]],
+            'cash_amount' => $cash,
+        ])
+        ->assertRedirect(route('pos.index'))
+        ->assertSessionHasNoErrors();
+
+    return Sale::query()->latest('id')->firstOrFail();
+}
+
+it('starts a mixed payment: cash part stored, Midtrans charged only the QRIS part, no stock moved', function () {
+    fakeMidtrans();
+    $sale = startSplit(5000);
+
+    expect($sale)
+        ->status->toBe(SaleStatus::PendingPayment)
+        ->payment_method->toBe(PaymentMethod::Split)
+        ->total->toBe(12000)
+        ->split_cash_amount->toBe(5000)
+        ->and($sale->qrisPart())->toBe(7000)
+        ->and($this->product->fresh()->stock_on_hand)->toBe(10);
+
+    Http::assertSent(fn (HttpRequest $r) => str_ends_with($r->url(), '/v2/charge')
+        && $r['transaction_details'] === ['order_id' => 'INV-20261122-0001', 'gross_amount' => 7000]);
+
+    $this->actingAs($this->cashier)->get(route('pos.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('pendingQris.total', 12000)
+            ->where('pendingQris.amount', 7000)
+            ->where('pendingQris.cashAmount', 5000));
+});
+
+it('refuses a mixed payment whose cash part is zero, the whole total or more', function (int $cash) {
+    fakeMidtrans();
+
+    $this->actingAs($this->cashier)
+        ->post(route('pos.qris.store'), [
+            'items' => [['product_unit_id' => $this->unit->id, 'qty' => 3]],
+            'cash_amount' => $cash,
+        ])
+        ->assertSessionHasErrors('cash_amount');
+
+    expect(Sale::count())->toBe(0);
+    Http::assertNothingSent();
+})->with(['zero' => 0, 'whole total' => 12000, 'more than total' => 20000]);
+
+it('settles a mixed payment once by webhook for the QRIS part, not the total', function () {
+    fakeMidtrans();
+    $sale = startSplit(5000);
+
+    $this->postJson(route('webhooks.midtrans'), notification($sale, 'settlement', gross: '12000.00'))
+        ->assertOk()->assertJson(['message' => 'Amount does not match, ignored.']);
+    expect($sale->fresh()->status)->toBe(SaleStatus::PendingPayment);
+
+    $this->postJson(route('webhooks.midtrans'), notification($sale, 'settlement', gross: '7000.00'))
+        ->assertOk()->assertJson(['result' => 'settled']);
+    $this->postJson(route('webhooks.midtrans'), notification($sale, 'settlement', gross: '7000.00'))
+        ->assertOk()->assertJson(['result' => 'unchanged']);
+
+    expect($sale->fresh())
+        ->status->toBe(SaleStatus::Completed)
+        ->paid_amount->toBe(12000)
+        ->change_amount->toBe(0)
+        ->and($this->product->fresh()->stock_on_hand)->toBe(7)
+        ->and(StockMovement::where('type', StockMovementType::Sale)->count())->toBe(1);
+});
+
+it('settles a mixed payment by polling and shows both parts on the till, receipt and history', function () {
+    fakeMidtrans('settlement');
+    $sale = startSplit(5000);
+    Carbon::setTestNow(now()->addSeconds(5));
+
+    $this->actingAs($this->cashier)->getJson(route('pos.qris.show', $sale))
+        ->assertOk()->assertJson(['status' => 'completed']);
+
+    $this->actingAs($this->cashier)->get(route('pos.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('lastSale.method', 'split')
+            ->where('lastSale.cashAmount', 5000)
+            ->where('lastSale.qrisAmount', 7000));
+
+    $this->actingAs($this->cashier)->get(route('pos.receipts.show', $sale))
+        ->assertOk()
+        ->assertSeeInOrder(['Tunai', '5.000', 'QRIS', '7.000']);
+
+    $this->actingAs($this->cashier)->get(route('pos.sales.show', $sale))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('sale.paymentMethod', 'split')
+            ->where('sale.cashAmount', 5000)
+            ->where('sale.qrisAmount', 7000));
+
+    $this->actingAs($this->cashier)->get(route('pos.sales.index', ['method' => 'split']))
+        ->assertInertia(fn (Assert $page) => $page->has('sales.data', 1));
+});
+
+it('counts only the cash part of completed mixed payments in the drawer', function () {
+    fakeMidtrans();
+    $paid = startSplit(5000);
+    $this->postJson(route('webhooks.midtrans'), notification($paid, 'settlement', gross: '7000.00'))->assertOk();
+
+    $expired = startSplit(4000);
+    $this->postJson(route('webhooks.midtrans'), notification($expired, 'expire', gross: '8000.00'))
+        ->assertOk()->assertJson(['result' => 'cancelled']);
+
+    // A plain cash sale for comparison: 1 × 4000.
+    $this->actingAs($this->cashier)
+        ->post(route('pos.sales.store'), ['items' => [['product_unit_id' => $this->unit->id, 'qty' => 1]], 'paid_amount' => 5000])
+        ->assertSessionHasNoErrors();
+
+    $shift = $this->shift->fresh();
+    expect($shift->cashSalesTotal())->toBe(4000 + 5000)
+        ->and($shift->expectedCash())->toBe(50000 + 9000);
+
+    $this->actingAs($this->cashier)->get(route('pos.index'))
+        ->assertInertia(fn (Assert $page) => $page->where('shift.salesCount', 2));
+
+    $closed = app(CloseShift::class)->handle($shift, 59000);
+    expect($closed->cash_difference)->toBe(0);
+
+    $recap = ShiftRecap::build(DateRange::of('2026-11-22', '2026-11-22'));
+    expect($recap['shifts'][0])
+        ->cashSales->toBe(9000)
+        ->qrisSales->toBe(7000)
+        ->transactions->toBe(2);
+
+    $summary = SalesSummary::build(DateRange::of('2026-11-22', '2026-11-22'));
+    expect($summary['totals'])
+        ->gross->toBe(16000)
+        ->cash->toBe(9000)
+        ->qris->toBe(7000);
+});
+
+it('reminds the cashier to hand the cash back when a mixed payment is cancelled', function () {
+    fakeMidtrans('pending');
+    $sale = startSplit(5000);
+
+    $this->actingAs($this->cashier)->post(route('pos.qris.cancel', $sale))
+        ->assertRedirect(route('pos.index'))
+        ->assertSessionHas('inertia.flash_data.toast.message', 'QRIS INV-20261122-0001 dibatalkan. Kembalikan uang tunai Rp 5.000 ke pelanggan.');
+
+    expect($sale->fresh()->status)->toBe(SaleStatus::Cancelled)
+        ->and($this->shift->fresh()->expectedCash())->toBe(50000);
 });

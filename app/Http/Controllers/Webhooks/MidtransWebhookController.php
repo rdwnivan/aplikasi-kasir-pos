@@ -52,7 +52,7 @@ class MidtransWebhookController extends Controller
             return response()->json(['message' => 'Invalid signature.'], 403);
         }
 
-        $sale = Sale::query()->where('number', $orderId)->where('payment_method', PaymentMethod::Qris)->first();
+        $sale = Sale::query()->where('number', $orderId)->whereIn('payment_method', PaymentMethod::qrisMethods())->first();
 
         if ($sale === null) {
             $log('unknown_order');
@@ -60,7 +60,7 @@ class MidtransWebhookController extends Controller
             return response()->json(['message' => 'Unknown order, ignored.']);
         }
 
-        if ((int) round((float) $grossAmount) !== $sale->total) {
+        if ((int) round((float) $grossAmount) !== $sale->qrisPart()) {
             $log('amount_mismatch');
 
             return response()->json(['message' => 'Amount does not match, ignored.']);

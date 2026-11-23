@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Pos;
 
 use App\Actions\Sales\QrisPayments;
 use App\Actions\Sales\StartQrisPayment;
-use App\Enums\PaymentMethod;
 use App\Enums\SaleStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Pos\QrisCheckoutRequest;
@@ -12,6 +11,7 @@ use App\Models\Sale;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Number;
 use Inertia\Inertia;
 
 class QrisController extends Controller
@@ -31,6 +31,7 @@ class QrisController extends Controller
             $request->cartDiscountType(),
             $request->cartDiscountValue(),
             $held,
+            $request->cashAmount(),
         );
 
         // The till picks the pending QRIS up from its props and shows the QR.
@@ -74,7 +75,12 @@ class QrisController extends Controller
             $request->session()->put('last_sale_id', $sale->id);
             Inertia::flash('toast', ['type' => 'success', 'message' => "Ternyata {$sale->number} sudah dibayar. Transaksi selesai."]);
         } else {
-            Inertia::flash('toast', ['type' => 'info', 'message' => "QRIS {$sale->number} dibatalkan."]);
+            // A mixed payment's cash was taken before the QR was shown: it goes back to the customer.
+            $cash = $sale->cashPart();
+            $message = $cash > 0
+                ? "QRIS {$sale->number} dibatalkan. Kembalikan uang tunai Rp ".Number::format($cash, locale: 'id').' ke pelanggan.'
+                : "QRIS {$sale->number} dibatalkan.";
+            Inertia::flash('toast', ['type' => $cash > 0 ? 'warning' : 'info', 'message' => $message]);
         }
 
         return to_route('pos.index');
@@ -82,7 +88,7 @@ class QrisController extends Controller
 
     private function authorizeSale(Request $request, Sale $sale): void
     {
-        abort_unless($sale->payment_method === PaymentMethod::Qris, 404);
+        abort_unless($sale->payment_method?->usesQris() === true, 404);
         abort_unless($sale->user_id === $request->user()->id, 403);
     }
 }

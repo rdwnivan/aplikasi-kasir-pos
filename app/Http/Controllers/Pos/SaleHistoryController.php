@@ -118,6 +118,8 @@ class SaleHistoryController extends Controller
                 'paymentMethod' => $sale->payment_method?->value,
                 'paidAmount' => $sale->paid_amount,
                 'changeAmount' => $sale->change_amount,
+                'cashAmount' => $sale->cashPart(),
+                'qrisAmount' => $sale->qrisPart(),
                 'items' => $sale->items->map(fn (SaleItem $item) => [
                     'id' => $item->id,
                     'name' => $item->product_name,

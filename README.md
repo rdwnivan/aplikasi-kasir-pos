@@ -9,7 +9,7 @@ _Cash checkout from scan to change (animated PNG). All screenshots use the 30-da
 
 ## Features
 
-- **Till (kasir):** barcode scan, pcs / pack / carton units, item and cart discounts, held carts, keyboard shortcuts (F2 search, F4 hold, F8 held, F9 pay), cash with change, **QRIS via Midtrans**, 58/80 mm thermal receipts printed from the browser, reprints marked _SALINAN_. Works down to phone width.
+- **Till (kasir):** barcode scan, pcs / pack / carton units, item and cart discounts, held carts, keyboard shortcuts (F2 search, F4 hold, F8 held, F9 pay), cash with change, **QRIS via Midtrans**, mixed cash + QRIS, 58/80 mm thermal receipts printed from the browser, reprints marked _SALINAN_. Works down to phone width.
 
   <p><img src="docs/screenshots/kasir.jpg" alt="Cashier screen with a filled cart" width="74%"> <img src="docs/screenshots/kasir-mobile.jpg" alt="Cashier screen at 375 px" width="22%"></p>
 
@@ -109,10 +109,10 @@ npm run check && npm run types:check
 
 ## Roadmap
 
-Batches and expiry dates, split payments, customer credit (kasbon), multi-branch with stock transfers, offline PWA, direct ESC/POS printing, PDF exports, user management screen (see `docs/DESIGN.md` §6).
+Batches and expiry dates, customer credit (kasbon), multi-branch with stock transfers, offline PWA, direct ESC/POS printing, PDF exports, user management screen (see `docs/DESIGN.md` §6).
 
 ---
 
 ## Ringkasan (Bahasa Indonesia)
 
-Aplikasi kasir dan manajemen stok untuk satu toko: layar kasir dengan barcode, satuan bertingkat, diskon, tahan transaksi, pembayaran tunai dan QRIS (Midtrans), struk thermal, shift dan rekap kas, retur dengan PIN owner, pesanan pembelian (PO) dengan penerimaan bertahap, penerimaan barang, stok opname, kartu stok, peringatan stok minimum, laporan penjualan dan laba kotor, produk terlaris, nilai persediaan, rekap kasir, serta ekspor Excel. Stok dicatat di buku besar `stock_movements` dengan HPP moving average; PPN 12% dengan DPP 11/12. Jalankan dengan `php artisan migrate --seed` (atau Sail), lalu masuk dengan akun demo di atas.
+Aplikasi kasir dan manajemen stok untuk satu toko: layar kasir dengan barcode, satuan bertingkat, diskon, tahan transaksi, pembayaran tunai, QRIS (Midtrans), dan campuran tunai + QRIS, struk thermal, shift dan rekap kas, retur dengan PIN owner, pesanan pembelian (PO) dengan penerimaan bertahap, penerimaan barang, stok opname, kartu stok, peringatan stok minimum, laporan penjualan dan laba kotor, produk terlaris, nilai persediaan, rekap kasir, serta ekspor Excel. Stok dicatat di buku besar `stock_movements` dengan HPP moving average; PPN 12% dengan DPP 11/12. Jalankan dengan `php artisan migrate --seed` (atau Sail), lalu masuk dengan akun demo di atas.

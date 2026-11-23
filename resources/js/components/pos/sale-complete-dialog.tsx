@@ -38,16 +38,39 @@ export function SaleCompleteDialog({ sale, onPrint, onClose }: Props) {
                                     {formatRupiah(sale.total)}
                                 </dd>
                             </div>
-                            <div className="flex justify-between">
-                                <dt className="text-muted-foreground">
-                                    {sale.method === 'qris' ? 'QRIS' : 'Tunai'}
-                                </dt>
-                                <dd className="tabular-nums">
-                                    {formatRupiah(sale.paid)}
-                                </dd>
-                            </div>
+                            {sale.method === 'split' ? (
+                                <>
+                                    <div className="flex justify-between">
+                                        <dt className="text-muted-foreground">
+                                            Tunai
+                                        </dt>
+                                        <dd className="tabular-nums">
+                                            {formatRupiah(sale.cashAmount)}
+                                        </dd>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <dt className="text-muted-foreground">
+                                            QRIS
+                                        </dt>
+                                        <dd className="tabular-nums">
+                                            {formatRupiah(sale.qrisAmount)}
+                                        </dd>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="flex justify-between">
+                                    <dt className="text-muted-foreground">
+                                        {sale.method === 'qris'
+                                            ? 'QRIS'
+                                            : 'Tunai'}
+                                    </dt>
+                                    <dd className="tabular-nums">
+                                        {formatRupiah(sale.paid)}
+                                    </dd>
+                                </div>
+                            )}
                         </dl>
-                        {sale.method === 'qris' ? (
+                        {sale.method === 'qris' || sale.method === 'split' ? (
                             <div className="rounded-lg bg-emerald-500/10 p-4 text-center text-sm text-emerald-700 dark:text-emerald-400">
                                 Pembayaran QRIS diterima.
                             </div>

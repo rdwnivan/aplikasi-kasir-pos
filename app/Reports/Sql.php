@@ -29,6 +29,23 @@ final class Sql
         };
     }
 
+    /**
+     * Per sale, the part paid in cash (into the drawer) and the part paid by QRIS. A `split`
+     * sale has both (DESIGN.md §11). Shared by the reports and Shift::cashSalesTotal().
+     *
+     * @return literal-string
+     */
+    public static function cashPart(): string
+    {
+        return "CASE sales.payment_method WHEN 'cash' THEN sales.total WHEN 'split' THEN sales.split_cash_amount ELSE 0 END";
+    }
+
+    /** @return literal-string */
+    public static function qrisPart(): string
+    {
+        return "CASE sales.payment_method WHEN 'qris' THEN sales.total WHEN 'split' THEN sales.total - sales.split_cash_amount ELSE 0 END";
+    }
+
     /** Whole rupiah from whatever the driver returns for SUM() (string, int, float or null). */
     public static function rupiah(mixed $value): int
     {

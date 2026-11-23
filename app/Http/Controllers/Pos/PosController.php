@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Pos;
 
-use App\Enums\PaymentMethod;
 use App\Enums\SaleStatus;
 use App\Http\Controllers\Controller;
 use App\Models\ProductUnit;
@@ -52,10 +51,7 @@ class PosController extends Controller
             'id' => $shift->id,
             'openedAt' => $shift->opened_at->toIso8601String(),
             'openingCash' => $shift->opening_cash,
-            'salesCount' => $shift->sales()
-                ->where('status', SaleStatus::Completed)
-                ->where('payment_method', PaymentMethod::Cash)
-                ->count(),
+            'salesCount' => $shift->cashSalesCount(),
             'cashSalesTotal' => $shift->cashSalesTotal(),
             'refundsCount' => $shift->returns()->count(),
             'refundsTotal' => $shift->refundsTotal(),
@@ -135,6 +131,8 @@ class PosController extends Controller
             'paid' => $sale->paid_amount,
             'change' => $sale->change_amount,
             'method' => $sale->payment_method?->value,
+            'cashAmount' => $sale->cashPart(),
+            'qrisAmount' => $sale->qrisPart(),
         ];
     }
 
@@ -147,6 +145,8 @@ class PosController extends Controller
             'id' => $sale->id,
             'number' => $sale->number,
             'total' => $sale->total,
+            'amount' => $sale->qrisPart(),
+            'cashAmount' => $sale->cashPart(),
             'qrUrl' => $sale->qr_url,
             'qrString' => $sale->qr_string,
             'expiresAt' => $sale->payment_expires_at?->toIso8601String(),

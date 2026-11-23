@@ -2,7 +2,6 @@
 
 namespace App\Reports;
 
-use App\Enums\PaymentMethod;
 use App\Enums\SaleStatus;
 use App\Models\Shift;
 use App\Support\DateRange;
@@ -31,8 +30,8 @@ final class ShiftRecap
             ->where('status', SaleStatus::Completed->value)
             ->groupBy('shift_id')
             ->selectRaw('shift_id, COUNT(*) AS transactions')
-            ->selectRaw('SUM(CASE WHEN payment_method = ? THEN total ELSE 0 END) AS cash', [PaymentMethod::Cash->value])
-            ->selectRaw('SUM(CASE WHEN payment_method = ? THEN total ELSE 0 END) AS qris', [PaymentMethod::Qris->value])
+            ->selectRaw('SUM('.Sql::cashPart().') AS cash')
+            ->selectRaw('SUM('.Sql::qrisPart().') AS qris')
             ->get()
             ->keyBy('shift_id');
 

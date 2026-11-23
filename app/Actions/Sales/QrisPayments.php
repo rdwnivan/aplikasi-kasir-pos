@@ -2,7 +2,6 @@
 
 namespace App\Actions\Sales;
 
-use App\Enums\PaymentMethod;
 use App\Enums\SaleStatus;
 use App\Exceptions\InsufficientStockException;
 use App\Models\Sale;
@@ -62,7 +61,7 @@ final class QrisPayments
                 /** @var Sale $locked */
                 $locked = Sale::query()->whereKey($sale->id)->lockForUpdate()->firstOrFail();
 
-                if ($locked->payment_method !== PaymentMethod::Qris
+                if ($locked->payment_method?->usesQris() !== true
                     || ! in_array($locked->status, [SaleStatus::PendingPayment, SaleStatus::Cancelled], true)) {
                     return self::UNCHANGED;
                 }

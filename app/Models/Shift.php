@@ -4,12 +4,14 @@ namespace App\Models;
 
 use App\Enums\PaymentMethod;
 use App\Enums\SaleStatus;
+use App\Reports\Sql;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * @property int $id
@@ -51,12 +53,21 @@ class Shift extends Model
         return $this->opening_cash + $this->cashSalesTotal() - $this->refundsTotal();
     }
 
+    /** Cash taken in: whole cash sales plus the cash part of mixed cash + QRIS sales. */
     public function cashSalesTotal(): int
     {
-        return (int) $this->sales()
+        return Sql::rupiah($this->sales()
             ->where('status', SaleStatus::Completed)
-            ->where('payment_method', PaymentMethod::Cash)
-            ->sum('total');
+            ->sum(DB::raw(Sql::cashPart())));
+    }
+
+    /** Completed sales that put cash in the drawer (cash and mixed). */
+    public function cashSalesCount(): int
+    {
+        return $this->sales()
+            ->where('status', SaleStatus::Completed)
+            ->whereIn('payment_method', [PaymentMethod::Cash, PaymentMethod::Split])
+            ->count();
     }
 
     public function refundsTotal(): int

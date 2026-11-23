@@ -55,13 +55,19 @@ export type LastSale = {
     total: number;
     paid: number;
     change: number;
-    method: 'cash' | 'qris' | null;
+    method: 'cash' | 'qris' | 'split' | null;
+    cashAmount: number;
+    qrisAmount: number;
 };
 
 export type PendingQris = {
     id: number;
     number: string;
     total: number;
+    /** What the QR charges: the whole total, or the rest after a cash part. */
+    amount: number;
+    /** Cash already taken for a mixed payment; 0 for plain QRIS. */
+    cashAmount: number;
     qrUrl: string | null;
     qrString: string | null;
     expiresAt: string | null;

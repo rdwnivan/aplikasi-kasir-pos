@@ -258,13 +258,28 @@ class DemoSalesSeeder extends Seeder
     }
 
     /**
-     * Cash customers hand over a round amount; about a quarter pay by QRIS. Demo data only:
-     * QRIS sales here are written as already settled, since no payment gateway is involved.
+     * Cash customers hand over a round amount; about a quarter pay by QRIS and one in ten
+     * mixes the two (round cash, the rest by QRIS). Demo data only: QRIS and mixed sales here
+     * are written as already settled, since no payment gateway is involved.
      */
     private function settleLikeACustomer(Sale $sale): void
     {
-        if (mt_rand(1, 4) === 1) {
+        $roll = mt_rand(1, 20);
+
+        if ($roll <= 5) {
             $sale->forceFill(['payment_method' => PaymentMethod::Qris, 'paid_amount' => $sale->total, 'change_amount' => 0])->save();
+
+            return;
+        }
+
+        $cashPart = intdiv($sale->total, 10_000) * 10_000;
+        if ($roll <= 7 && $cashPart > 0 && $cashPart < $sale->total) {
+            $sale->forceFill([
+                'payment_method' => PaymentMethod::Split,
+                'split_cash_amount' => $cashPart,
+                'paid_amount' => $sale->total,
+                'change_amount' => 0,
+            ])->save();
 
             return;
         }
