@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Support\DemoAccounts;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -29,6 +31,10 @@ class OwnerPinController extends Controller
         ], [
             'pin' => 'PIN',
         ]);
+
+        if (DemoAccounts::isProtected($request->user())) {
+            throw ValidationException::withMessages(['pin' => DemoAccounts::MESSAGE]);
+        }
 
         $request->user()->forceFill(['pin_hash' => Hash::make($data['pin'])])->save();
 

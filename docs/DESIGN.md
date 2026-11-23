@@ -36,7 +36,7 @@ Tujuan: project portofolio GitHub untuk posisi **fullstack web developer**, deng
 
 Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permission).
 
-Tidak ada pendaftaran mandiri: setiap akun harus punya role, jadi fitur `registration` Fortify dimatikan (halaman dan rute `/register` dihapus, 2026-11-23). Akun dibuat oleh pengelola (seeder/tinker; layar kelola pengguna ada di roadmap §6).
+Tidak ada pendaftaran mandiri: setiap akun harus punya role, jadi fitur `registration` Fortify dimatikan (halaman dan rute `/register` dihapus, 2026-11-23). Akun dibuat oleh owner di menu **Pengguna** (§12): tambah akun, ubah nama/email/role, nonaktifkan/aktifkan lagi (akun tidak pernah dihapus), reset kata sandi, dan hapus PIN owner lain. Owner tidak bisa menonaktifkan atau mengubah role dirinya sendiri, dan harus selalu ada minimal satu owner aktif.
 
 ## 4. Model stok & HPP
 
@@ -90,7 +90,10 @@ Tidak ada pendaftaran mandiri: setiap akun harus punya role, jadi fitur `registr
 - Mode offline (PWA + antrean sinkronisasi)
 - Cetak ESC/POS langsung (WebUSB / QZ Tray)
 - Ekspor PDF
-- Layar kelola pengguna (tambah/nonaktifkan akun, atur role, reset PIN owner); saat ini role dan PIN owner hanya bisa diatur lewat seeder/tinker
+- ~~Layar kelola pengguna~~ → selesai di v2, lihat §12
+- Owner menutup shift kasir lain (mis. kasir pulang dengan shift terbuka; sekarang akun itu juga tidak bisa dinonaktifkan sampai shift-nya ditutup)
+- Owner mereset 2FA/passkey akun lain, dan melindungi 2FA/passkey akun demo publik (§12.4)
+- Log audit perubahan akun
 
 ## 7. Kualitas & demo
 
@@ -121,6 +124,7 @@ Tidak ada pendaftaran mandiri: setiap akun harus punya role, jadi fitur `registr
 - **Urutan deploy tes → migrasi → deploy (§9.6)** (2026-11-23). Push `4885e68` (alur baru dari `c718eb0`): Vercel tidak membuat deployment dari Git, termasuk untuk commit yang membawa `git.deploymentEnabled: false` itu sendiri. `tests` hijau → `demo-db` run [45089118190](https://github.com/rdwnivan/aplikasi-kasir-pos/actions/runs/45089118190): job migrate sukses (00:30:00–00:30:31 UTC), lalu job deploy mulai 00:30:33. Percobaan pertama berhenti di "Check configuration" karena `VERCEL_TOKEN` belum diisi, jadi tidak ada yang tayang, sesuai rancangan. Setelah secret diisi, hanya job deploy dijalankan ulang (attempt 2): `vercel deploy --prod` ±2,5 menit (upload + build image di Vercel), deployment `dpl_2jiYFHePQt1Jv2uMsGypwMrXsLDD` `READY` untuk SHA `4885e68`, `/up` 200 dari CI dan dari luar, tanpa error runtime di Vercel. Push ini tidak membawa migrasi baru; yang pertama dengan migrasi adalah `2006dfb` (split payment, §11): `demo-db` menjalankan `2026_11_23_000002_add_split_cash_amount_to_sales` pukul 01:16:23 UTC, job deploy baru mulai 01:16:28 dan selesai 01:18:08 (`dpl_51ULi6wXnWq1VPhNVnUfEGYX9bE9` `READY`), `/up` 200, `/register` 404, tanpa error runtime. Jadi kode baru tayang sesudah skemanya ada. Cabang "migrasi gagal → deploy dilewati" belum pernah terjadi sungguhan. Catatan: metadata Vercel menampilkan `githubCommitRef: HEAD` karena CI men-checkout SHA (detached), bukan branch.
 - **Purchase Order: tutup sisa, batal, "Buat PO" dari stok minimum, dan pesan "melebihi sisa" di demo live** (2026-11-23, deploy `9b41724`, akun gudang). (1) Form terima PO-20261123-0001 (sisa 1 dus) dengan atribut `max` dibuang lewat devtools dan qty 2: server menolak dengan "Melebihi sisa pesanan (1)." (teks ini hanya ada di `ReceivePurchaseOrder`), tanpa GR baru. (2) Tutup sisa PO yang sama: alasan kosong ditolak ("Alasan wajib diisi."), dengan alasan → status `closed`, alasan dan waktu tampil, tombol aksi hilang, tetap satu GR. (3) Stok minimum Aqua Botol 600ml dinaikkan sementara 24 → 120 (stok 97): kartu "Stok menipis" menampilkannya dengan tombol "Buat PO" (`?dari=stok-minimum`), form terisi 6 dus (2 × 120 − 97 = 143 pcs, dibulatkan ke atas per dus = 144) dengan harga beli terakhir Rp 70.900/dus → draft → dipesan sebagai PO-20261123-0002. (4) Batal PO itu dengan alasan → `cancelled`, tombol aksi hilang, dan `/pesanan-pembelian/2/terima` mengalihkan kembali ke halaman PO. Stok minimum dikembalikan ke 24; kartu stok Aqua tetap 97 pcs tanpa mutasi baru; kartu "PO belum selesai" kosong; Vercel tidak mencatat error runtime. Kedua PO uji tetap ada di DB demo (catatan berlabel "Claude").
 - **Pembayaran campuran tunai + QRIS (§11), browser lokal** (2026-11-23, `php -S`, DB `kasir_pos_test` hasil `migrate:fresh --seed`, Midtrans Sandbox). Akun kasir, modal Rp 200.000, Beras Rojolele 5kg Rp 78.000 → F9 → "Tunai + QRIS", tunai Rp 50.000: dialog menampilkan "Sisa lewat QRIS Rp 28.000". Percobaan pertama ditolak Midtrans (409 conflict) karena nomor INV-20261123-0001 sudah dipakai transaksi demo live di akun sandbox yang sama; sale itu otomatis `cancelled` dan pesan Midtrans tampil di dialog. Percobaan kedua (INV-20261123-0002): QR Rp 28.000 dengan keterangan "tunai Rp 50.000 sudah diterima", dibayar lewat simulator sandbox (GoPay) → polling menyelesaikan transaksi, dialog sukses menampilkan Tunai Rp 50.000 / QRIS Rp 28.000, header shift "1 transaksi · kas Rp 250.000", stok beras 5 → 4. Riwayat menampilkan "Tunai + QRIS", detail "Dibayar tunai / Dibayar QRIS", struk "Tunai 50.000 / QRIS 28.000" dengan referensi Midtrans. Pembatalan oleh kasir (Gula Pasir Rp 18.500, tunai Rp 10.000, INV-20261123-0004) awalnya hanya memunculkan toast "QRIS … dibatalkan" tanpa pengingat uang tunai; sekarang toast peringatan "Kembalikan uang tunai Rp 10.000 ke pelanggan." muncul dan kas shift tetap Rp 250.000. Tanpa error di konsol. Data demo hasil seeder: 41 dari 542 transaksi lunas campuran, `stock:rebuild` cocok. Pesan pengembalian di dialog saat QR kedaluwarsa sendiri belum dilihat di browser (perlu menunggu 15 menit); demo live belum dicoba.
+- **Kelola pengguna (§12), browser lokal** (2026-11-23, `php -S`, DB `kasir_pos_test` hasil `migrate:fresh --seed`, akun owner demo). Menu "Pengguna" tampil di bawah Laporan; menu aksi baris sendiri hanya berisi "Ubah". Tambah kasir "Dewi Lestari" dengan email `Dewi@Kasir.test` → tersimpan sebagai `dewi@kasir.test` dengan badge "Belum ganti kata sandi". Login sebagai Dewi: `/kasir` dialihkan ke "Ganti kata sandi"; kata sandi sementara yang sama ditolak ("Pilih kata sandi yang berbeda…"), kata sandi baru diterima dan Dewi masuk ke "Buka shift". Dewi membuka shift; `DeactivateUser` yang dipanggil dari luar (script dengan app ter-bootstrap, meniru owner di perangkat lain) ditolak "Dewi Lestari masih punya shift terbuka. Tutup shift dulu." Setelah shift ditutup, penonaktifan berhasil dan request Dewi berikutnya dialihkan ke login. Percobaan pertama berakhir di halaman login **tanpa pesan**, karena Action juga menghapus baris `sessions` dan halaman login tidak menampilkan error yang datang lewat redirect. Keduanya diperbaiki (baris sesi tidak lagi dihapus; login menampilkan `errors.email` dari props), lalu diulang: sesi yang sedang berjalan berakhir dengan "Akun ini dinonaktifkan. Hubungi owner.", dan login kata sandi saat nonaktif menampilkan pesan yang sama. Dari UI owner: tab "Nonaktif (1)" → Aktifkan lagi, Reset kata sandi (badge muncul lagi, sesi owner tetap), Nonaktifkan lewat dialog konfirmasi. Tanpa error di konsol. Yang tidak dicoba di browser (hanya tes Pest): akses 403 untuk gudang/kasir, pengaman owner aktif terakhir, hapus PIN owner lain, dan perlindungan akun demo (`POS_PROTECT_DEMO_ACCOUNTS`), karena server lokal berjalan tanpa variabel itu. Demo live belum dicoba.
 
 ### Belum terverifikasi
 
@@ -320,3 +324,76 @@ Tujuan: pelanggan bisa membayar **sebagian tunai dan sisanya QRIS** dalam satu t
 - Laporan ringkasan & rekap shift: kolom Tunai/QRIS memisahkan bagian campuran; total tetap = Tunai + QRIS.
 - Struk dan riwayat menampilkan kedua bagian; filter riwayat `split`.
 - `DemoSalesSeeder` tetap jalan.
+
+## 12. v2: Kelola pengguna (owner saja) (2026-11-23)
+
+Tujuan: owner bisa **menambah akun, mengubah nama/email/role, menonaktifkan dan mengaktifkan lagi, serta mereset kata sandi dan PIN** tanpa seeder/tinker. Akun tidak pernah dihapus, karena transaksi, shift, retur, GR/opname, dan PO merujuk ke `users` dengan `restrictOnDelete`.
+
+### 12.1 Kondisi sekarang (hasil pemeriksaan)
+
+- `users`: `name`, `email` (unik), `email_verified_at`, `password`, `pin_hash` (§9.2), kolom 2FA, `remember_token`. Role lewat spatie (`model_has_roles`), satu role per akun.
+- Login lewat Fortify (kata sandi, 2FA, passkey). Semua route POS memakai `verified`, jadi akun tanpa `email_verified_at` tidak bisa masuk; aplikasi tidak mengirim email (`MAIL_MAILER=log`).
+- PIN owner sudah bisa diatur **oleh owner itu sendiri** di Pengaturan → PIN owner (konfirmasi kata sandi). `OwnerPin::approve()` mencocokkan PIN terhadap semua owner yang punya PIN.
+- Sesi di demo memakai driver `database` (Dockerfile); lokal/tes bisa driver lain. Belum ada `AuthenticateSession`, jadi ganti kata sandi tidak mengakhiri sesi lain.
+- Starter kit masih punya **hapus akun sendiri** (`DELETE settings/profile`). Untuk akun yang punya riwayat ini gagal di FK (500); untuk akun tanpa riwayat ini benar-benar menghapus, termasuk owner terakhir.
+
+### 12.2 Skema (migrasi baru, hanya menambah)
+
+- `users.deactivated_at` (timestamp, nullable). `null` = aktif. Tidak ada backfill: semua akun lama tetap aktif, dan kode lama yang tidak membaca kolom ini tetap jalan (expand → contract, §9.6).
+- `users.must_change_password` (boolean, default `false`): diisi `true` saat owner membuat akun atau mereset kata sandi.
+
+### 12.3 Aturan
+
+- **Tambah akun**: nama, email (unik), role, kata sandi awal (aturan `Password::defaults()`, diketik owner dua kali). `email_verified_at = now()` karena owner yang menjamin emailnya; tidak ada email undangan. PIN tidak diisi.
+- **Ubah**: nama, email, role. Email yang diubah owner tetap terverifikasi.
+- **Nonaktifkan / aktifkan lagi**: mengisi / mengosongkan `deactivated_at`. Akun nonaktif tetap tampil di laporan, riwayat, dan filter kasir; hanya tidak bisa masuk.
+- **Akun nonaktif tidak bisa masuk dan sesinya berakhir**:
+    - Login kata sandi ditolak di `Fortify::authenticateUsing` dengan pesan "Akun ini dinonaktifkan. Hubungi owner." (sebelum tantangan 2FA).
+    - Middleware `EnsureUserIsActive` di grup `web`: kalau pengguna yang sedang login nonaktif → logout, sesi di-invalidate, kembali ke halaman login dengan pesan yang sama. Ini menutup sesi yang sedang berjalan, cookie remember-me, dan login passkey, apa pun driver sesinya. Saat dinonaktifkan, `remember_token` juga diganti. Baris `sessions` sengaja tidak dihapus: percobaan di browser menunjukkan sesi yang dihapus berakhir di halaman login tanpa penjelasan, sedangkan lewat middleware pengguna melihat pesannya.
+- **Reset kata sandi oleh owner**: owner mengetik kata sandi sementara; `must_change_password = true`; semua sesi akun itu berakhir (`AuthenticateSession` ditambahkan ke grup `web`, sehingga sesi dengan hash kata sandi lama di-logout; sesi owner sendiri tidak terpengaruh). Saat login berikutnya, pengguna diarahkan ke halaman **"Ganti kata sandi"** dan tidak bisa membuka halaman lain sampai menggantinya. Alasannya: owner tidak seharusnya tetap mengetahui kata sandi kasir.
+- **PIN owner**: owner bisa **mereset (menghapus) PIN owner lain**, misalnya karena lupa atau bocor; owner itu lalu mengatur PIN barunya sendiri di Pengaturan → PIN owner. Owner tidak bisa _mengisi_ PIN orang lain, karena PIN menandai siapa yang menyetujui retur (`sale_returns.approved_by`). PIN milik sendiri tetap diatur di Pengaturan. Akun owner nonaktif dan akun yang diturunkan dari owner tidak lagi dicocokkan oleh `OwnerPin::approve()` (PIN-nya ikut dihapus saat role diturunkan).
+- **Pengaman**:
+    - Owner tidak bisa menonaktifkan dirinya sendiri atau mengubah role dirinya sendiri (tombol disembunyikan dan server menolak).
+    - Harus selalu ada **minimal satu owner aktif**. Aksi yang menonaktifkan atau menurunkan owner mengunci baris owner aktif (`SELECT … FOR UPDATE`) lalu menghitung ulang, jadi dua owner yang saling menonaktifkan bersamaan tidak bisa membuat toko tanpa owner.
+    - **Akun yang shift-nya masih terbuka** (kasir maupun owner yang membuka shift) tidak bisa dinonaktifkan, dan tidak bisa diubah ke role tanpa akses kasir (gudang): "Tutup shift dulu." Shift harus ditutup dengan hitungan laci, dan transaksi QRIS yang menunggu pembayaran tergantung pada shift itu. Akibatnya, kasir yang pergi dengan shift terbuka tetap harus login untuk menutupnya; menutup shift orang lain oleh owner di luar cakupan ini (dicatat di roadmap).
+- **Hapus akun sendiri dihapus** (route, tombol, dan request-nya), digantikan oleh penonaktifan oleh owner.
+
+### 12.4 Demo live
+
+Akun demo dibuka untuk umum dengan kata sandi yang tertulis di README, jadi pengunjung bisa saja menonaktifkan owner demo atau mengganti kata sandinya. Konfigurasi baru `pos.protect_demo_accounts` (env `POS_PROTECT_DEMO_ACCOUNTS`, default `false`; diisi `true` di blok `ENV` `Dockerfile`, bukan lewat pengaturan Vercel): ketiga akun dari `DemoUserSeeder` tidak bisa dinonaktifkan, diubah role/emailnya, direset kata sandi/PIN-nya, dan juga tidak bisa mengganti kata sandi, email, maupun PIN-nya sendiri di Pengaturan. Akun baru yang dibuat pengunjung bisa dikelola penuh. Lokal dan tes memakai default `false`.
+
+Celah yang **belum** ditutup (sudah ada sebelum §12): pengunjung masih bisa mengaktifkan 2FA atau mendaftarkan passkey di akun demo (Pengaturan → Keamanan). 2FA yang diaktifkan pengunjung akan mengunci akun demo itu bagi orang lain, dan sejauh ini hanya bisa dipulihkan dengan `demo-db` mode `reset` atau mengosongkan kolom 2FA di DB. Dicatat di roadmap §6.
+
+### 12.5 Layar & route (`role:owner`; gudang dan kasir 403)
+
+| URL                                 | Isi                                                                                                      |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `GET /pengguna`                     | daftar: nama, email, role, status (aktif/nonaktif), PIN (ada/belum), shift terbuka; filter role & status |
+| `POST /pengguna`                    | tambah akun (dialog)                                                                                     |
+| `PUT /pengguna/{user}`              | ubah nama/email/role (dialog)                                                                            |
+| `POST /pengguna/{user}/nonaktifkan` | nonaktifkan (dialog konfirmasi)                                                                          |
+| `POST /pengguna/{user}/aktifkan`    | aktifkan lagi                                                                                            |
+| `PUT /pengguna/{user}/kata-sandi`   | reset kata sandi (dialog; bukan untuk akun sendiri)                                                      |
+| `DELETE /pengguna/{user}/pin`       | hapus PIN owner lain                                                                                     |
+| `GET`/`PUT /ganti-kata-sandi`       | wajib ganti kata sandi (semua role, `auth`)                                                              |
+
+- Semua aksi ada di satu halaman: tabel dengan menu aksi per baris, form di dialog (seperti master supplier), bukan halaman tambah/ubah terpisah. Aksi yang tidak berlaku (akun sendiri, shift terbuka, akun demo terlindungi) dinonaktifkan di menu, dan server tetap menolaknya.
+- Nama route `users.*` dan `forced-password.*`, dipanggil lewat Wayfinder. Menu sidebar owner "Pengguna" (di bawah "Laporan").
+- Write operation di `app/Actions/Users/*` (`CreateUser`, `UpdateUser`, `DeactivateUser`, `ReactivateUser`, `SetTemporaryPassword`, `ResetOwnerPin`; aturan bersama di trait `GuardsAccounts`), masing-masing memegang transaksinya; pengaman §12.3 ada di Action, bukan hanya di UI. Middleware `AuthenticateSession`, `EnsureUserIsActive`, `RequirePasswordChange` di grup `web`.
+
+### 12.6 Di luar cakupan
+
+Log audit siapa mengubah apa, reset 2FA/passkey milik orang lain, undangan lewat email, menutup shift orang lain, banyak role per akun, permission per fitur.
+
+### 12.7 Rencana tes (ditulis lebih dulu)
+
+- Akses: gudang dan kasir 403 di semua route `users.*`; tamu diarahkan ke login.
+- Tambah: akun dengan role terpilih, `email_verified_at` terisi, `must_change_password = true`; email ganda dan kata sandi lemah ditolak.
+- Ubah nama/email/role; ganti role owner → bukan owner menghapus `pin_hash`.
+- Nonaktif: login kata sandi ditolak dengan pesan; sesi yang sudah login di-logout pada request berikutnya; aktif lagi bisa login.
+- Pengaman: nonaktifkan/ubah role diri sendiri ditolak; owner aktif terakhir tidak bisa dinonaktifkan/diturunkan; akun dengan shift terbuka tidak bisa dinonaktifkan atau dijadikan gudang.
+- Reset kata sandi: kata sandi lama tidak berlaku, sesi lama berakhir, login berikutnya dialihkan ke "Ganti kata sandi" sampai diganti.
+- Reset PIN: `pin_hash` owner lain kosong; `OwnerPin::approve()` tidak menerima PIN owner nonaktif.
+- Hapus akun sendiri: route sudah tidak ada.
+- `pos.protect_demo_accounts = true`: aksi pada tiga akun demo ditolak, akun lain tetap bisa dikelola.
+- `DemoSalesSeeder` tetap jalan (`migrate:fresh --seed` dengan `APP_ENV=local`).

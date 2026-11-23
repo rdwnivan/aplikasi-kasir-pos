@@ -22,6 +22,8 @@ use Spatie\Permission\Traits\HasRoles;
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property string|null $pin_hash Owner PIN for approving returns (bcrypt).
+ * @property Carbon|null $deactivated_at Set by an owner; a deactivated account cannot log in.
+ * @property bool $must_change_password The password was set by an owner and must be replaced.
  * @property string|null $two_factor_secret
  * @property string|null $two_factor_recovery_codes
  * @property Carbon|null $two_factor_confirmed_at
@@ -47,6 +49,13 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
+            'deactivated_at' => 'datetime',
+            'must_change_password' => 'boolean',
         ];
+    }
+
+    public function isActive(): bool
+    {
+        return $this->deactivated_at === null;
     }
 }

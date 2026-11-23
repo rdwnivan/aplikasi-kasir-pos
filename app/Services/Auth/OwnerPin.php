@@ -10,7 +10,7 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Owner approval by PIN, for actions a cashier may not do alone (returns). The PIN is matched
- * against every owner who has set one; wrong guesses are throttled per requesting user.
+ * against every active owner who has set one; wrong guesses are throttled per requesting user.
  */
 final class OwnerPin
 {
@@ -29,7 +29,7 @@ final class OwnerPin
             throw ValidationException::withMessages([$field => "Terlalu banyak PIN salah. Coba lagi dalam {$minutes} menit."]);
         }
 
-        $owners = User::role(Role::Owner->value)->whereNotNull('pin_hash')->get();
+        $owners = User::role(Role::Owner->value)->whereNull('deactivated_at')->whereNotNull('pin_hash')->get();
 
         if ($owners->isEmpty()) {
             throw ValidationException::withMessages([$field => 'Owner belum mengatur PIN. Atur dulu di Pengaturan → PIN owner.']);

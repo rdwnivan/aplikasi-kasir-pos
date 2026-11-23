@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\PasswordUpdateRequest;
 use App\Http\Requests\Settings\TwoFactorAuthenticationRequest;
+use App\Support\DemoAccounts;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Laravel\Fortify\Features;
@@ -55,6 +57,10 @@ class SecurityController extends Controller
      */
     public function update(PasswordUpdateRequest $request): RedirectResponse
     {
+        if (DemoAccounts::isProtected($request->user())) {
+            throw ValidationException::withMessages(['password' => DemoAccounts::MESSAGE]);
+        }
+
         $request->user()->update([
             'password' => $request->password,
         ]);

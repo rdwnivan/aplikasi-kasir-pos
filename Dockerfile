@@ -52,6 +52,8 @@ FROM base
 # QRIS, and DEMO_SEED / POS_DEMO_SALES_HISTORY for a demo). Any of these can be overridden.
 # Nothing is queued today, so jobs run inline instead of waiting in a table with no worker.
 # TRUSTED_PROXIES=* because TLS ends at the host's proxy, the only thing that reaches us.
+# POS_PROTECT_DEMO_ACCOUNTS stops visitors locking the public demo accounts (passwords in the
+# README); set it to false for a store with real accounts.
 ENV APP_ENV=production \
     APP_DEBUG=false \
     APP_NAME="Kasir POS" \
@@ -66,6 +68,7 @@ ENV APP_ENV=production \
     MAIL_MAILER=log \
     TRUSTED_PROXIES=* \
     MIDTRANS_IS_PRODUCTION=false \
+    POS_PROTECT_DEMO_ACCOUNTS=true \
     PORT=8080
 
 COPY --from=build /app /app

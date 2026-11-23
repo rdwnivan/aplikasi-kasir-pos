@@ -1,4 +1,4 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, usePage } from '@inertiajs/react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
@@ -17,6 +17,10 @@ type Props = {
 };
 
 export default function Login({ status, canResetPassword }: Props) {
+    // Errors flashed by a redirect here (e.g. "Akun ini dinonaktifkan" when the middleware
+    // ends a session) arrive as page props, which <Form> only shows after its own submit.
+    const redirectError = usePage().props.errors.email;
+
     return (
         <>
             <Head title="Masuk" />
@@ -43,7 +47,9 @@ export default function Login({ status, canResetPassword }: Props) {
                                     autoComplete="email"
                                     placeholder="email@example.com"
                                 />
-                                <InputError message={errors.email} />
+                                <InputError
+                                    message={errors.email ?? redirectError}
+                                />
                             </div>
 
                             <div className="grid gap-2">

@@ -11,6 +11,7 @@ import {
     ShoppingCart,
     Tags,
     Truck,
+    UsersRound,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
@@ -35,6 +36,7 @@ import reports from '@/routes/reports';
 import stockOpnames from '@/routes/stock-opnames';
 import suppliers from '@/routes/suppliers';
 import units from '@/routes/units';
+import users from '@/routes/users';
 import type { NavItem } from '@/types';
 
 export function AppSidebar() {
@@ -71,6 +73,11 @@ export function AppSidebar() {
                               title: 'Laporan',
                               href: reports.sales(),
                               icon: ChartColumn,
+                          },
+                          {
+                              title: 'Pengguna',
+                              href: users.index(),
+                              icon: UsersRound,
                           },
                       ],
                   },

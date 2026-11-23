@@ -33,4 +33,8 @@ return [
     // Seed 30 days of sales history (DemoSalesSeeder) outside the local environment too,
     // for a public demo deploy. Local always gets it.
     'demo_sales_history' => (bool) env('POS_DEMO_SALES_HISTORY', false),
+
+    // On a public demo, the seeded accounts (passwords in the README) cannot be deactivated,
+    // re-roled or have their email, password or PIN changed. See App\Support\DemoAccounts.
+    'protect_demo_accounts' => (bool) env('POS_PROTECT_DEMO_ACCOUNTS', false),
 ];
