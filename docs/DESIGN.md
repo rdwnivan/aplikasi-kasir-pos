@@ -267,3 +267,55 @@ draft ──Pesan──▶ ordered ──terima sebagian──▶ partial ──
 - Akses: kasir mendapat 403 di semua route PO.
 - Konkurensi (PostgreSQL, `tests/Concurrency`): dua proses menerima sisa terakhir PO yang sama, hanya satu yang berhasil.
 - `DemoSalesSeeder` tetap jalan (`migrate:fresh --seed` dengan `APP_ENV=local`).
+
+## 11. v2: Pembayaran campuran tunai + QRIS (2026-11-23)
+
+Tujuan: pelanggan bisa membayar **sebagian tunai dan sisanya QRIS** dalam satu transaksi (mis. belanja Rp 87.500, bayar Rp 50.000 tunai, Rp 37.500 lewat QRIS). Kombinasi lain (dua QRIS, kartu) di luar cakupan.
+
+### 11.1 Prinsip
+
+- Satu transaksi tetap satu `Sale` dengan satu nomor INV dan satu struk; tidak ada transaksi pecahan.
+- Bagian QRIS memakai mesin status QRIS yang sudah ada (`pending_payment → completed / cancelled`, §9.3). Stok baru keluar saat QRIS lunas, sama seperti QRIS penuh.
+- Uang tunai diterima kasir **di awal**, sebelum QR ditampilkan, dengan jumlah pas (tanpa kembalian). Uang itu baru dihitung masuk laci setelah transaksi `completed`; kalau QRIS batal/kedaluwarsa, layar meminta kasir mengembalikan uang tunainya.
+- Angka laporan selalu memisahkan bagian tunai dan bagian QRIS, jadi kas laci dan rekonsiliasi Midtrans tetap tepat.
+
+### 11.2 Skema (migrasi baru, hanya menambah)
+
+- `PaymentMethod::Split` (`split`, label "Tunai + QRIS"); kolom `sales.payment_method` sudah `varchar(10)`.
+- Kolom baru `sales.split_cash_amount` (`unsignedBigInteger`, nullable): bagian tunai, hanya diisi bila `payment_method = split`. Bagian QRIS = `total − split_cash_amount`, tidak disimpan terpisah.
+- Tidak ada backfill: transaksi lama tunai/QRIS tidak berubah. Migrasi ini aman untuk kode lama (expand → contract, §9.6), karena kode lama tidak pernah menulis `split`.
+
+### 11.3 Aturan
+
+- Bagian tunai minimal Rp 1 dan lebih kecil dari total, jadi bagian QRIS minimal Rp 1. Total nol tidak bisa dibayar campuran.
+- Midtrans di-charge sebesar **bagian QRIS**; webhook mencocokkan `gross_amount` dengan bagian QRIS (bukan total). Webhook, polling dan tombol batal menerima `qris` maupun `split`.
+- Saat lunas: `paid_amount = total`, `change_amount = 0`, sama seperti QRIS penuh.
+- Kas yang diharapkan di laci (`Shift::expectedCash`) = modal + Σ bagian tunai transaksi `completed` (tunai penuh = total, campuran = `split_cash_amount`) − refund. Hitungan "penjualan tunai (N transaksi)" di tutup shift ikut menghitung transaksi campuran.
+- Lunas terlambat setelah dibatalkan (`cancelled → completed`, §9.3) tetap berlaku untuk campuran. Karena kasir sudah diminta mengembalikan uang tunainya, selisih laci akan terlihat saat tutup shift; risiko ini diterima (jendelanya hanya beberapa detik setelah batal) dan dicatat, bukan disembunyikan.
+- Retur tidak berubah: refund selalu tunai dari laci shift yang berjalan, apa pun cara bayarnya (§9.2).
+
+### 11.4 Layar
+
+- Dialog bayar (F9) mendapat pilihan ketiga **"Tunai + QRIS"**: input "Tunai diterima", baris "Sisa lewat QRIS", tombol "Tampilkan QRIS Rp …". Tombol nonaktif bila tunai 0 atau ≥ total.
+- Dialog QR menampilkan nominal bagian QRIS dan baris "Tunai Rp … sudah diterima". Saat QR batal/kedaluwarsa: "Kembalikan uang tunai Rp … ke pelanggan".
+- Dialog "Transaksi berhasil", struk, riwayat transaksi (filter dan detail) menampilkan kedua bagian: "Tunai Rp …" dan "QRIS Rp …" (+ referensi Midtrans di struk).
+
+### 11.5 Dampak ke laporan
+
+- Ringkasan penjualan dan rekap shift: kolom Tunai dan QRIS dihitung dari bagian masing-masing, bukan dari `payment_method` saja. Ekspresi SQL-nya satu tempat (`App\Reports\Sql::cashPart()` / `qrisPart()`), dipakai juga oleh `Shift`.
+- Laba kotor tidak terpengaruh (tidak bergantung cara bayar).
+
+### 11.6 Data demo
+
+- `DemoSalesSeeder`: sekitar 1 dari 10 transaksi dibayar campuran (tunai dibulatkan ke bawah ke Rp 10.000, sisanya QRIS), ditulis langsung sebagai lunas seperti QRIS demo.
+
+### 11.7 Rencana tes (ditulis lebih dulu)
+
+- Mulai campuran: sale `pending_payment`, `split_cash_amount` tersimpan, Midtrans di-charge bagian QRIS (fake client), stok belum keluar.
+- Validasi: tunai 0, tunai ≥ total, total nol ditolak tanpa membuat sale.
+- Lunas lewat polling dan webhook: stok keluar sekali, `paid_amount = total`; webhook dengan `gross_amount` = total (bukan bagian QRIS) ditolak `amount_mismatch`.
+- Batal/kedaluwarsa: sale `cancelled`, kas laci tidak bertambah.
+- Kas laci & tutup shift: modal + tunai penuh + bagian tunai campuran − refund.
+- Laporan ringkasan & rekap shift: kolom Tunai/QRIS memisahkan bagian campuran; total tetap = Tunai + QRIS.
+- Struk dan riwayat menampilkan kedua bagian; filter riwayat `split`.
+- `DemoSalesSeeder` tetap jalan.
