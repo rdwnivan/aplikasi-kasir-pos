@@ -109,7 +109,7 @@ npm run check && npm run types:check
 
 ## Roadmap
 
-Batches and expiry dates, split payments, customer credit (kasbon), multi-branch with stock transfers, offline PWA, direct ESC/POS printing, user management screen.
+Batches and expiry dates, split payments, customer credit (kasbon), multi-branch with stock transfers, offline PWA, direct ESC/POS printing, PDF exports, user management screen (see `docs/DESIGN.md` §6).
 
 ---
 
