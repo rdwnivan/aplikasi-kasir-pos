@@ -36,6 +36,8 @@ Tujuan: project portofolio GitHub untuk posisi **fullstack web developer**, deng
 
 Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permission).
 
+Tidak ada pendaftaran mandiri: setiap akun harus punya role, jadi fitur `registration` Fortify dimatikan (halaman dan rute `/register` dihapus, 2026-11-23). Akun dibuat oleh pengelola (seeder/tinker; layar kelola pengguna ada di roadmap §6).
+
 ## 4. Model stok & HPP
 
 - **Buku besar pergerakan stok** (`stock_movements`) adalah satu-satunya sumber kebenaran.
