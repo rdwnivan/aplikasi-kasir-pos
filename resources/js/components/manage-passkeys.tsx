@@ -14,16 +14,18 @@ export type Props = {
     signInLocked?: boolean;
 };
 
-const EmptyState = () => {
+const EmptyState = ({ showHint }: { showHint: boolean }) => {
     return (
         <div className="p-8 text-center">
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
                 <KeyRound className="h-7 w-7 text-muted-foreground" />
             </div>
             <p className="font-medium">Belum ada passkey</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-                Tambahkan passkey untuk masuk tanpa kata sandi
-            </p>
+            {showHint && (
+                <p className="mt-1 text-sm text-muted-foreground">
+                    Tambahkan passkey untuk masuk tanpa kata sandi
+                </p>
+            )}
         </div>
     );
 };
@@ -65,12 +67,15 @@ export default function ManagePasskeys(props: Props) {
                         />
                     ))
                 ) : (
-                    <EmptyState />
+                    <EmptyState showHint={!locked} />
                 )}
             </div>
 
             {locked ? (
-                <DemoSignInNote />
+                <DemoSignInNote>
+                    Passkey tidak bisa ditambah atau dihapus di akun demo
+                    publik.
+                </DemoSignInNote>
             ) : (
                 <PasskeyRegistration onSuccess={handleRegisterSuccess} />
             )}

@@ -60,7 +60,11 @@ export default function ManageTwoFactor(props: Props) {
                         ? '2FA aktif di akun ini. Akan dimatikan otomatis saat login berikutnya.'
                         : '2FA tidak aktif di akun ini.'}
                 </p>
-                <DemoSignInNote />
+                <DemoSignInNote>
+                    2FA tidak bisa diubah di akun demo publik, supaya akun ini
+                    tetap bisa dipakai pengunjung berikutnya. Buat akun baru
+                    untuk mencobanya.
+                </DemoSignInNote>
             </div>
         );
     }
