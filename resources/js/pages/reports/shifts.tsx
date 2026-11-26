@@ -1,8 +1,9 @@
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { PageHeader } from '@/components/page-header';
 import { ExportButton, ReportNav } from '@/components/reports/report-nav';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
     Table,
     TableBody,
@@ -29,6 +30,9 @@ type ShiftRow = {
     expectedCash: number;
     countedCash: number | null;
     difference: number | null;
+    /** Set only when someone other than the cashier closed it (DESIGN.md §13). */
+    closedBy: string | null;
+    closeReason: string | null;
 };
 
 type CashierRow = {
@@ -203,11 +207,42 @@ export default function ShiftsReport({
                                         </TableCell>
                                         <TableCell className="whitespace-nowrap text-muted-foreground">
                                             {s.closedAt ? (
-                                                formatDateTime(s.closedAt)
+                                                <>
+                                                    {formatDateTime(s.closedAt)}
+                                                    {s.closedBy && (
+                                                        <div
+                                                            className="max-w-56 text-xs whitespace-normal"
+                                                            title={
+                                                                s.closeReason ??
+                                                                undefined
+                                                            }
+                                                        >
+                                                            oleh {s.closedBy}
+                                                            {s.closeReason &&
+                                                                `: ${s.closeReason}`}
+                                                        </div>
+                                                    )}
+                                                </>
                                             ) : (
-                                                <Badge variant="outline">
-                                                    Berjalan
-                                                </Badge>
+                                                <div className="flex items-center gap-2">
+                                                    <Badge variant="outline">
+                                                        Berjalan
+                                                    </Badge>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="h-7"
+                                                        asChild
+                                                    >
+                                                        <Link
+                                                            href={reports.shifts.close.edit(
+                                                                s.id,
+                                                            )}
+                                                        >
+                                                            Tutup shift
+                                                        </Link>
+                                                    </Button>
+                                                </div>
                                             )}
                                         </TableCell>
                                         <TableCell className="text-right tabular-nums">

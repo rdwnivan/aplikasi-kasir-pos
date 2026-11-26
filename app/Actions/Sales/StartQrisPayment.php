@@ -71,6 +71,8 @@ final class StartQrisPayment
         }
 
         $sale = DB::transaction(function () use ($cashier, $shift, $cart, $fromHeld, $cashAmount) {
+            $this->lockOpenShift($shift);
+
             if ($fromHeld !== null) {
                 DiscardHeldSale::deleteLocked($fromHeld, $cashier);
             }

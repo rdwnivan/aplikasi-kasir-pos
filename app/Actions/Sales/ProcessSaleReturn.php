@@ -58,6 +58,8 @@ final class ProcessSaleReturn
         $approver = $this->ownerPin->approve($actor, $ownerPin);
 
         return DB::transaction(function () use ($actor, $sale, $quantities, $reason, $shift, $approver) {
+            $this->lockOpenShift($shift);
+
             // One return at a time per sale, so two terminals cannot both refund the last unit.
             /** @var Sale $locked */
             $locked = Sale::query()->whereKey($sale->id)->lockForUpdate()->firstOrFail();

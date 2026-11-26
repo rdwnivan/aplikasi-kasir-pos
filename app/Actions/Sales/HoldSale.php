@@ -34,6 +34,8 @@ final class HoldSale
         $cart = $this->carts->build($items, $discountType, $discountValue);
 
         return DB::transaction(function () use ($cashier, $shift, $cart, $label, $replacing) {
+            $this->lockOpenShift($shift);
+
             if ($replacing !== null) {
                 DiscardHeldSale::deleteLocked($replacing, $cashier);
             }

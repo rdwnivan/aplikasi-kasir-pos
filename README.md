@@ -13,7 +13,7 @@ _Cash checkout from scan to change (animated PNG). All screenshots use the 30-da
 
   <p><img src="docs/screenshots/kasir.jpg" alt="Cashier screen with a filled cart" width="74%"> <img src="docs/screenshots/kasir-mobile.jpg" alt="Cashier screen at 375 px" width="22%"></p>
 
-- **Shifts:** opening float, expected vs counted cash at close; refunds come out of the running drawer.
+- **Shifts:** opening float, expected vs counted cash at close; refunds come out of the running drawer. An owner can close a shift someone left open (from the shift recap or **Pengguna**) with the counted drawer and a reason: waiting QRIS payments are checked with Midtrans and cancelled if unpaid, held carts are dropped, and the recap and Excel export show who closed it and why.
 - **Returns:** limited to what was sold minus earlier returns, approved with an **owner PIN**, refund = what the customer actually paid (transaction discount and PPN apportioned to the rupiah).
 
   <img src="docs/screenshots/detail-retur.jpg" alt="Transaction detail with a processed return" width="70%">
@@ -28,7 +28,7 @@ _Cash checkout from scan to change (animated PNG). All screenshots use the 30-da
   <p><img src="docs/screenshots/dashboard.jpg" alt="Owner dashboard" width="49%"> <img src="docs/screenshots/laporan-penjualan.jpg" alt="Sales and gross profit report" width="49%"></p>
 
 - **Indonesian rules:** PPN 12% on DPP 11/12 (effective 11%), prices incl. or excl. tax, Rupiah formatting, Asia/Jakarta calendar days.
-- Roles: **owner**, **gudang** (warehouse), **kasir** (cashier). No self sign-up: the owner manages accounts under **Pengguna** (add with a starting password, change name / email / role, deactivate and reactivate, reset a password, clear another owner's PIN). Accounts are never deleted because they carry sales and stock history. A deactivated account cannot log in and its open sessions end. A password set by the owner must be replaced at the next login. The owner cannot lock themself out, there is always at least one active owner, and an account with an open shift stays active until the shift is closed.
+- Roles: **owner**, **gudang** (warehouse), **kasir** (cashier). No self sign-up: the owner manages accounts under **Pengguna** (add with a starting password, change name / email / role, deactivate and reactivate, reset a password, clear another owner's PIN). Accounts are never deleted because they carry sales and stock history. A deactivated account cannot log in and its open sessions end. A password set by the owner must be replaced at the next login. The owner cannot lock themself out, there is always at least one active owner, and an account with an open shift stays active until the shift is closed (by its cashier or by an owner).
 
 ### Gallery
 
@@ -111,10 +111,10 @@ npm run check && npm run types:check
 
 ## Roadmap
 
-Batches and expiry dates, customer credit (kasbon), multi-branch with stock transfers, offline PWA, direct ESC/POS printing, PDF exports, an owner closing another cashier's shift, an audit log of account changes (see `docs/DESIGN.md` §6).
+Batches and expiry dates, customer credit (kasbon), multi-branch with stock transfers, offline PWA, direct ESC/POS printing, PDF exports, an owner resetting another account's 2FA/passkeys, an audit log of account changes (see `docs/DESIGN.md` §6).
 
 ---
 
 ## Ringkasan (Bahasa Indonesia)
 
-Aplikasi kasir dan manajemen stok untuk satu toko: layar kasir dengan barcode, satuan bertingkat, diskon, tahan transaksi, pembayaran tunai, QRIS (Midtrans), dan campuran tunai + QRIS, struk thermal, shift dan rekap kas, retur dengan PIN owner, pesanan pembelian (PO) dengan penerimaan bertahap, penerimaan barang, stok opname, kartu stok, peringatan stok minimum, laporan penjualan dan laba kotor, produk terlaris, nilai persediaan, rekap kasir, ekspor Excel, serta kelola pengguna oleh owner (tambah akun, ubah role, nonaktifkan, reset kata sandi dan PIN). Stok dicatat di buku besar `stock_movements` dengan HPP moving average; PPN 12% dengan DPP 11/12. Jalankan dengan `php artisan migrate --seed` (atau Sail), lalu masuk dengan akun demo di atas.
+Aplikasi kasir dan manajemen stok untuk satu toko: layar kasir dengan barcode, satuan bertingkat, diskon, tahan transaksi, pembayaran tunai, QRIS (Midtrans), dan campuran tunai + QRIS, struk thermal, shift dan rekap kas (owner bisa menutup shift kasir lain), retur dengan PIN owner, pesanan pembelian (PO) dengan penerimaan bertahap, penerimaan barang, stok opname, kartu stok, peringatan stok minimum, laporan penjualan dan laba kotor, produk terlaris, nilai persediaan, rekap kasir, ekspor Excel, serta kelola pengguna oleh owner (tambah akun, ubah role, nonaktifkan, reset kata sandi dan PIN). Stok dicatat di buku besar `stock_movements` dengan HPP moving average; PPN 12% dengan DPP 11/12. Jalankan dengan `php artisan migrate --seed` (atau Sail), lalu masuk dengan akun demo di atas.

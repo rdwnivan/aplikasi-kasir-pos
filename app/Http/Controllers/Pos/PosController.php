@@ -21,7 +21,9 @@ class PosController extends Controller
         $shift = Shift::query()->open()->where('user_id', $request->user()->id)->first();
 
         if ($shift === null) {
-            return Inertia::render('pos/open-shift');
+            return Inertia::render('pos/open-shift', [
+                'closedByOther' => self::closedByOther($request),
+            ]);
         }
 
         $tax = TaxSettings::fromConfig();
@@ -42,6 +44,27 @@ class PosController extends Controller
             'qrisEnabled' => $midtrans->isConfigured(),
             'pendingQris' => self::pendingQris($shift),
         ]);
+    }
+
+    /**
+     * When the user's last shift was closed by an owner (DESIGN.md §13), say so on the
+     * "Buka shift" screen until they open a new one.
+     *
+     * @return array{by: string, at: string, reason: string|null}|null
+     */
+    private static function closedByOther(Request $request): ?array
+    {
+        $last = Shift::query()->with('closer')->where('user_id', $request->user()->id)->latest('opened_at')->latest('id')->first();
+
+        if ($last === null || ! $last->closedByOther() || $last->closed_at === null) {
+            return null;
+        }
+
+        return [
+            'by' => (string) $last->closer?->name,
+            'at' => $last->closed_at->toIso8601String(),
+            'reason' => $last->close_reason,
+        ];
     }
 
     /** @return array<string, mixed> */

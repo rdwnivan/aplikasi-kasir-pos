@@ -91,7 +91,7 @@ Tidak ada pendaftaran mandiri: setiap akun harus punya role, jadi fitur `registr
 - Cetak ESC/POS langsung (WebUSB / QZ Tray)
 - Ekspor PDF
 - ~~Layar kelola pengguna~~ → selesai di v2, lihat §12
-- Owner menutup shift kasir lain (mis. kasir pulang dengan shift terbuka; sekarang akun itu juga tidak bisa dinonaktifkan sampai shift-nya ditutup)
+- ~~Owner menutup shift kasir lain~~ → selesai di v2, lihat §13
 - Owner mereset 2FA/passkey akun lain
 - ~~Melindungi 2FA/passkey akun demo publik~~ → selesai, lihat §12.4.1
 - Log audit perubahan akun
@@ -357,7 +357,7 @@ Tujuan: owner bisa **menambah akun, mengubah nama/email/role, menonaktifkan dan 
 - **Pengaman**:
     - Owner tidak bisa menonaktifkan dirinya sendiri atau mengubah role dirinya sendiri (tombol disembunyikan dan server menolak).
     - Harus selalu ada **minimal satu owner aktif**. Aksi yang menonaktifkan atau menurunkan owner mengunci baris owner aktif (`SELECT … FOR UPDATE`) lalu menghitung ulang, jadi dua owner yang saling menonaktifkan bersamaan tidak bisa membuat toko tanpa owner.
-    - **Akun yang shift-nya masih terbuka** (kasir maupun owner yang membuka shift) tidak bisa dinonaktifkan, dan tidak bisa diubah ke role tanpa akses kasir (gudang): "Tutup shift dulu." Shift harus ditutup dengan hitungan laci, dan transaksi QRIS yang menunggu pembayaran tergantung pada shift itu. Akibatnya, kasir yang pergi dengan shift terbuka tetap harus login untuk menutupnya; menutup shift orang lain oleh owner di luar cakupan ini (dicatat di roadmap).
+    - **Akun yang shift-nya masih terbuka** (kasir maupun owner yang membuka shift) tidak bisa dinonaktifkan, dan tidak bisa diubah ke role tanpa akses kasir (gudang): "Tutup shift dulu." Shift harus ditutup dengan hitungan laci, dan transaksi QRIS yang menunggu pembayaran tergantung pada shift itu. Sejak §13, owner bisa menutup shift itu sendiri (menu aksi "Tutup shift" dan badge "Shift terbuka" di Pengguna mengarah ke halaman tutup shift owner), lalu menonaktifkan atau mengubah role akunnya; kasirnya tidak perlu login lagi.
 - **Hapus akun sendiri dihapus** (route, tombol, dan request-nya), digantikan oleh penonaktifan oleh owner.
 
 ### 12.4 Demo live
@@ -405,7 +405,7 @@ Aturan yang sama dengan kata sandi/email/PIN: **cara akun demo yang dilindungi m
 
 ### 12.6 Di luar cakupan
 
-Log audit siapa mengubah apa, reset 2FA/passkey milik orang lain, undangan lewat email, menutup shift orang lain, banyak role per akun, permission per fitur.
+Log audit siapa mengubah apa, reset 2FA/passkey milik orang lain, undangan lewat email, menutup shift orang lain (kemudian dikerjakan di §13), banyak role per akun, permission per fitur.
 
 ### 12.7 Rencana tes (ditulis lebih dulu)
 
@@ -419,3 +419,48 @@ Log audit siapa mengubah apa, reset 2FA/passkey milik orang lain, undangan lewat
 - Hapus akun sendiri: route sudah tidak ada.
 - `pos.protect_demo_accounts = true`: aksi pada tiga akun demo ditolak, akun lain tetap bisa dikelola.
 - `DemoSalesSeeder` tetap jalan (`migrate:fresh --seed` dengan `APP_ENV=local`).
+
+## 13. v2: Owner menutup shift kasir lain (2026-11-26)
+
+Tujuan: owner bisa menutup shift yang ditinggal terbuka (kasir pulang, perangkat rusak) **tanpa login sebagai kasir itu**, dengan hitungan laci yang tetap tercatat, sehingga rekap kas benar dan akun itu bisa dinonaktifkan atau diubah role-nya (§12.3).
+
+### 13.1 Kondisi sekarang (hasil pemeriksaan)
+
+- `CloseShift::handle(Shift, countedCash, note)` mengunci baris shift, menolak bila ada QRIS `pending_payment` atau keranjang ditahan, lalu menyimpan `expected_cash`, `counted_cash`, `cash_difference`. Hanya dipanggil dari `ShiftController::update`, yang mencari shift terbuka milik pengguna yang login.
+- Kasir sendiri tidak bisa membereskan QRIS orang lain: `QrisController` menolak (403) sale milik pengguna lain, dan `DiscardHeldSale` hanya untuk kasirnya. Jadi aturan "tolak penutupan" tidak bisa diselesaikan owner.
+- `CompleteSale`, `HoldSale`, `StartQrisPayment`, `ProcessSaleReturn` mengambil shift terbuka lewat `ResolvesOpenShift` **tanpa mengunci shift**. Selama hanya kasir itu sendiri yang menutup, celahnya kecil; begitu orang lain bisa menutup, transaksi bisa tersimpan ke shift yang baru saja ditutup (kas seharusnya yang tersimpan jadi salah).
+- `ShiftRecap` dan ekspor menampilkan dibuka/ditutup, tetapi tidak siapa yang menutup. Keranjang di layar kasir disimpan di `localStorage` per `shift.id`.
+
+### 13.2 Keputusan
+
+- **Tempat:** halaman baru khusus owner `GET /laporan/kasir/shift/{shift}/tutup` (form seperti layar Tutup shift kasir: modal, penjualan tunai, retur, kas seharusnya, uang dihitung, selisih langsung). Pintu masuknya: tombol **"Tutup shift"** di baris berstatus "Berjalan" pada Laporan → Rekap kasir & shift, dan di halaman Pengguna (badge "Shift terbuka" serta item menu "Nonaktifkan (tutup shift dulu)" menjadi tautan ke halaman ini). Shift milik owner sendiri dialihkan ke layar Tutup shift biasa.
+- **Hitungan laci wajib** (owner menghitung uang yang ada di laci; bila uangnya tidak ada, isi 0 dan selisihnya terlihat). **Alasan wajib** (maks. 255 karakter), mis. "Kasir pulang, lupa tutup shift".
+- **QRIS `pending_payment` milik shift itu dibereskan otomatis**, bukan menolak penutupan: sebelum transaksi DB, setiap sale dicek ke Midtrans lewat `QrisPayments::cancelByCashier()` (yang sudah ada: refresh status → lunas jadi `completed` dan ikut dihitung; selain itu dibatalkan di Midtrans lalu `cancelled`). Di dalam transaksi penutupan, sale yang masih `pending_payment` (mis. Midtrans tidak terjangkau) dibatalkan lokal. Halaman tutup menampilkan daftarnya lebih dulu, termasuk bagian tunai transaksi campuran yang mungkin masih dipegang kasir ("tunai Rp … mungkin ada di laci, tidak dihitung"). Lunas terlambat setelah dibatalkan tetap berlaku (§9.3, §11.3); kas seharusnya yang sudah tersimpan tidak berubah.
+- **Keranjang ditahan milik shift itu dihapus** (tidak memesan stok, §5), jumlahnya ditampilkan di halaman sebelum menutup.
+- **Siapa yang menutup:** migrasi expand saja (§9.6): `shifts.closed_by` (FK `users`, nullable, `restrictOnDelete`) dan `shifts.close_reason` (string, nullable). Mulai sekarang semua penutupan mengisi `closed_by` (kasir sendiri = dirinya); shift lama tetap `null` dan dibaca sebagai "ditutup kasirnya sendiri". Kode lama yang masih melayani selama migrasi tidak membaca kolom ini.
+- **Rekap & ekspor:** kolom Ditutup menampilkan "oleh {nama owner}" + alasan di bawah waktu tutup bila `closed_by ≠ user_id`; ekspor Excel "Per shift" mendapat kolom **Ditutup oleh** (kosong bila kasirnya sendiri) dan **Alasan**.
+- **Kasir yang masih login:** request berikutnya yang butuh shift (bayar, tahan, QRIS, retur) gagal dengan "Buka shift dulu sebelum bertransaksi." lalu `/kasir` menampilkan halaman Buka shift dengan pemberitahuan "Shift Anda ditutup oleh {owner} pukul {jam}: {alasan}" (prop dari shift terakhir kasir itu bila ditutup orang lain dan belum ada shift baru). Polling QRIS yang sedang tampil melihat status `cancelled`. Keranjang yang sedang diisi hilang (kunci `localStorage` per shift); ini diterima karena penutupan oleh owner adalah kejadian luar biasa, dan halaman owner menampilkan **transaksi terakhir shift itu** ("12 menit lalu") sebagai peringatan bahwa kasir mungkin masih bertugas.
+- **Konkurensi:** `ResolvesOpenShift` ditambah varian terkunci yang dipanggil di dalam transaksi `CompleteSale`, `HoldSale`, `StartQrisPayment`, `ProcessSaleReturn`: `SELECT … FOR UPDATE` pada baris shift lalu cek ulang masih terbuka. Penutupan juga mengunci shift lebih dulu, jadi transaksi dan penutupan berjalan bergantian; transaksi yang kalah mendapat pesan "Buka shift dulu…". Urutan kunci di semua alur: **shift → sale → produk**; `QrisPayments::settle()` tidak mengunci shift, jadi tidak ada siklus.
+- **Akun demo publik:** owner pengunjung **boleh** menutup shift `kasir@kasir.test`. `DemoAccounts::isProtected` menjaga cara akun masuk (kata sandi, email, role, 2FA); menutup shift tidak mengubah itu, dan siapa pun yang login sebagai kasir demo sudah bisa menutup shift itu sendiri. Melarangnya justru membuat shift terbuka yang ditinggal pengunjung tidak bisa dibereskan.
+- **Tidak berubah:** penutupan oleh kasir sendiri tetap menolak bila ada QRIS menunggu atau keranjang ditahan (kasir bisa membereskannya sendiri). Pengaman §12.3 tetap: akun dengan shift terbuka tidak bisa dinonaktifkan/dijadikan gudang; bedanya sekarang owner bisa menutup shift itu dulu.
+
+### 13.3 Implementasi
+
+- Action baru `App\Actions\Sales\CloseShiftForUser` (owner): validasi alasan & hitungan → bereskan QRIS di luar transaksi → transaksi: kunci shift, cek masih terbuka, hapus keranjang ditahan, batalkan sisa `pending_payment`, lalu logika tutup yang sama dengan `CloseShift` (`CloseShift::lockOpen()` / `closeLocked()`) dengan `closed_by` dan `close_reason`. `CloseShift::handle()` mendapat parameter opsional `closedBy` (bawaan: kasir shift itu).
+- Kunci shift di transaksi kasir: `ResolvesOpenShift::lockOpenShift()`.
+- Controller `App\Http\Controllers\Reports\ShiftCloseController` (`edit`, `update`), route `reports.shifts.close.edit|update` (`/laporan/kasir/shift/{shift}/tutup`) di grup `role:owner`; halaman `resources/js/pages/reports/close-shift.tsx`. Prop `closedByOther` di `pos/open-shift`, `open_shift_id` di `users/index`, `closedBy`/`closeReason` di `ShiftRecap`.
+- Migrasi `2026_11_26_000001_add_closed_by_to_shifts`. Tes: `tests/Feature/Sales/OwnerCloseShiftTest.php`, `tests/Concurrency/ShiftCloseRaceTest.php`.
+
+### 13.4 Rencana tes (ditulis lebih dulu)
+
+- Akses: kasir dan gudang 403; shift sudah ditutup → kembali dengan pesan; shift milik owner sendiri → dialihkan ke layar kasir.
+- Tutup oleh owner: `expected_cash`/`counted_cash`/`cash_difference` benar (termasuk campuran dan retur), `closed_by` = owner, `close_reason` tersimpan; alasan kosong dan hitungan negatif ditolak.
+- QRIS menunggu (fake Midtrans): yang ternyata lunas jadi `completed` dan masuk kas seharusnya, stok keluar sekali; yang belum dibayar `cancelled` dan dibatalkan di Midtrans; Midtrans gagal → tetap `cancelled` lokal.
+- Keranjang ditahan shift itu terhapus; keranjang shift lain tidak.
+- Kasir setelah shift-nya ditutup: bayar/tahan/QRIS/retur ditolak "Buka shift dulu…"; `/kasir` merender Buka shift dengan prop pemberitahuan; setelah membuka shift baru pemberitahuan hilang.
+- Penutupan oleh kasir sendiri: `closed_by` = kasir, aturan tolak lama tetap.
+- Rekap & ekspor: "Ditutup oleh" dan alasan muncul hanya untuk penutupan oleh orang lain.
+- Setelah ditutup owner, `DeactivateUser` dan ubah role ke gudang berhasil.
+- Konkurensi (PostgreSQL, `tests/Concurrency`): `CompleteSale` dan penutupan oleh owner berebut shift yang sama → sale tidak pernah tersimpan di shift yang sudah tertutup, dan `expected_cash` cocok dengan sale yang masuk.
+- `pos.protect_demo_accounts = true`: owner tetap bisa menutup shift akun kasir demo.
+- `DemoSalesSeeder` tetap jalan.

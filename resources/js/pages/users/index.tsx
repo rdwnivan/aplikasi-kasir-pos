@@ -1,5 +1,6 @@
-import { Head, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import {
+    DoorClosed,
     KeyRound,
     MoreHorizontal,
     Pencil,
@@ -51,6 +52,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useOpenKey } from '@/hooks/use-open-key';
 import { toastFirstError } from '@/lib/errors';
 import { formatDate } from '@/lib/format';
+import reports from '@/routes/reports';
 import users from '@/routes/users';
 import type { RoleName } from '@/types';
 
@@ -64,6 +66,7 @@ type Account = {
     has_pin: boolean;
     must_change_password: boolean;
     has_open_shift: boolean;
+    open_shift_id: number | null;
     is_self: boolean;
     is_protected: boolean;
 };
@@ -235,11 +238,26 @@ export default function Users({ users: accounts, passwordRules }: Props) {
                                                     )}
                                                 </Badge>
                                             )}
-                                            {u.has_open_shift && (
-                                                <Badge variant="outline">
-                                                    Shift terbuka
-                                                </Badge>
-                                            )}
+                                            {u.open_shift_id !== null &&
+                                                (u.is_self ? (
+                                                    <Badge variant="outline">
+                                                        Shift terbuka
+                                                    </Badge>
+                                                ) : (
+                                                    <Badge
+                                                        variant="outline"
+                                                        asChild
+                                                    >
+                                                        <Link
+                                                            href={reports.shifts.close.edit(
+                                                                u.open_shift_id,
+                                                            )}
+                                                            title="Tutup shift ini"
+                                                        >
+                                                            Shift terbuka
+                                                        </Link>
+                                                    </Badge>
+                                                ))}
                                             {u.must_change_password && (
                                                 <Badge variant="outline">
                                                     Belum ganti kata sandi
@@ -369,6 +387,17 @@ function RowActions({
                 {!user.is_self && (
                     <>
                         <DropdownMenuSeparator />
+                        {user.open_shift_id !== null && (
+                            <DropdownMenuItem asChild>
+                                <Link
+                                    href={reports.shifts.close.edit(
+                                        user.open_shift_id,
+                                    )}
+                                >
+                                    <DoorClosed /> Tutup shift
+                                </Link>
+                            </DropdownMenuItem>
+                        )}
                         {user.active ? (
                             <DropdownMenuItem
                                 variant="destructive"

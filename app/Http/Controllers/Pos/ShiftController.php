@@ -51,17 +51,23 @@ class ShiftController extends Controller
         ]);
 
         $shift = $this->openShift($request) ?? abort(404);
-        $closed = $close->handle($shift, (int) $data['counted_cash'], $data['note'] ?? null);
+        $closed = $close->handle($shift, (int) $data['counted_cash'], $data['note'] ?? null, closedBy: $request->user());
 
-        $difference = $closed->cash_difference;
-        $message = match (true) {
-            $difference === 0 => 'Shift ditutup. Kas pas.',
-            $difference < 0 => 'Shift ditutup. Kas kurang '.self::rupiah(-$difference).'.',
-            default => 'Shift ditutup. Kas lebih '.self::rupiah($difference).'.',
-        };
-        Inertia::flash('toast', ['type' => $difference === 0 ? 'success' : 'warning', 'message' => $message]);
+        self::flashClosed($closed, 'Shift ditutup.');
 
         return to_route('pos.index');
+    }
+
+    /** Toast after a close: "{prefix} Kas pas / kurang Rp … / lebih Rp …". */
+    public static function flashClosed(Shift $closed, string $prefix): void
+    {
+        $difference = (int) $closed->cash_difference;
+        $message = match (true) {
+            $difference === 0 => "{$prefix} Kas pas.",
+            $difference < 0 => "{$prefix} Kas kurang ".self::rupiah(-$difference).'.',
+            default => "{$prefix} Kas lebih ".self::rupiah($difference).'.',
+        };
+        Inertia::flash('toast', ['type' => $difference === 0 ? 'success' : 'warning', 'message' => $message]);
     }
 
     private function openShift(Request $request): ?Shift

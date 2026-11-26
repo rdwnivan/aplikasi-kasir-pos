@@ -27,7 +27,7 @@ class UserController extends Controller
 
     public function index(Request $request): Response
     {
-        $openShifts = Shift::query()->open()->pluck('user_id')->flip();
+        $openShifts = Shift::query()->open()->pluck('id', 'user_id');
 
         return Inertia::render('users/index', [
             'users' => User::query()->with('roles')->orderBy('name')->get()
@@ -41,6 +41,7 @@ class UserController extends Controller
                     'has_pin' => $user->pin_hash !== null,
                     'must_change_password' => $user->must_change_password,
                     'has_open_shift' => $openShifts->has($user->id),
+                    'open_shift_id' => $openShifts->get($user->id),
                     'is_self' => $user->is($request->user()),
                     'is_protected' => DemoAccounts::isProtected($user),
                 ]),

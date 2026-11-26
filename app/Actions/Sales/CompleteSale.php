@@ -50,6 +50,8 @@ final class CompleteSale
         }
 
         return DB::transaction(function () use ($cashier, $shift, $cart, $paidAmount, $fromHeld) {
+            $this->lockOpenShift($shift);
+
             if ($fromHeld !== null) {
                 DiscardHeldSale::deleteLocked($fromHeld, $cashier);
             }

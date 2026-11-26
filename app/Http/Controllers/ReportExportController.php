@@ -147,10 +147,13 @@ class ReportExportController extends Controller
                     ['label' => 'Kas seharusnya', 'format' => Spreadsheet::RUPIAH, 'width' => 16],
                     ['label' => 'Dihitung', 'format' => Spreadsheet::RUPIAH],
                     ['label' => 'Selisih', 'format' => Spreadsheet::RUPIAH],
+                    ['label' => 'Ditutup oleh', 'width' => 20],
+                    ['label' => 'Alasan', 'width' => 40],
                 ],
                 array_map(fn (array $s) => [
                     $s['cashier'], $time($s['openedAt']), $time($s['closedAt']), $s['transactions'], $s['openingCash'],
                     $s['cashSales'], $s['qrisSales'], -$s['refunds'], $s['expectedCash'], $s['countedCash'], $s['difference'],
+                    $s['closedBy'] ?? '', $s['closeReason'] ?? '',
                 ], $report['shifts']),
             )
             ->download(self::filename('rekap-kasir', $range));

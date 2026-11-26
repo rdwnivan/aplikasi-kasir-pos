@@ -23,6 +23,8 @@ use Illuminate\Support\Facades\DB;
  * @property int|null $counted_cash
  * @property int|null $cash_difference
  * @property string|null $note
+ * @property int|null $closed_by null on shifts closed before DESIGN.md §13: read as the cashier
+ * @property string|null $close_reason why someone other than the cashier closed it
  */
 #[Fillable(['user_id', 'opened_at', 'opening_cash', 'note'])]
 class Shift extends Model
@@ -36,12 +38,19 @@ class Shift extends Model
             'expected_cash' => 'integer',
             'counted_cash' => 'integer',
             'cash_difference' => 'integer',
+            'closed_by' => 'integer',
         ];
     }
 
     public function isOpen(): bool
     {
         return $this->closed_at === null;
+    }
+
+    /** Closed by someone other than its own cashier (an owner, DESIGN.md §13). */
+    public function closedByOther(): bool
+    {
+        return $this->closed_by !== null && $this->closed_by !== $this->user_id;
     }
 
     /**
@@ -85,6 +94,12 @@ class Shift extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function closer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'closed_by');
     }
 
     /** @return HasMany<Sale, $this> */

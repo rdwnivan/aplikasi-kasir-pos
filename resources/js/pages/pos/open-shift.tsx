@@ -1,7 +1,8 @@
 import { Head, useForm } from '@inertiajs/react';
-import { Wallet } from 'lucide-react';
+import { Info, Wallet } from 'lucide-react';
 import InputError from '@/components/input-error';
 import { RupiahInput } from '@/components/pos/rupiah-input';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -11,11 +12,19 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { formatDateTime } from '@/lib/format';
 import pos from '@/routes/pos';
 
 const QUICK_FLOATS = [100000, 200000, 300000, 500000];
 
-export default function OpenShift() {
+/** Set when an owner closed this user's last shift (DESIGN.md §13). */
+type ClosedByOther = { by: string; at: string; reason: string | null };
+
+export default function OpenShift({
+    closedByOther = null,
+}: {
+    closedByOther?: ClosedByOther | null;
+}) {
     const form = useForm({ opening_cash: 200000, note: '' });
 
     return (
@@ -34,7 +43,20 @@ export default function OpenShift() {
                             mencocokkan kas.
                         </CardDescription>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-5">
+                        {closedByOther && (
+                            <Alert>
+                                <Info />
+                                <AlertDescription>
+                                    Shift Anda sebelumnya ditutup oleh{' '}
+                                    {closedByOther.by} pada{' '}
+                                    {formatDateTime(closedByOther.at)}
+                                    {closedByOther.reason
+                                        ? `: ${closedByOther.reason}`
+                                        : '.'}
+                                </AlertDescription>
+                            </Alert>
+                        )}
                         <form
                             className="space-y-5"
                             onSubmit={(e) => {

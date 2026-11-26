@@ -17,7 +17,7 @@ final class ShiftRecap
     public static function build(DateRange $range): array
     {
         $shifts = Shift::query()
-            ->with('user')
+            ->with(['user', 'closer'])
             ->where('opened_at', '>=', $range->startsAt())
             ->where('opened_at', '<', $range->endsBefore())
             ->orderByDesc('opened_at')
@@ -63,6 +63,9 @@ final class ShiftRecap
                 'expectedCash' => $shift->expected_cash ?? $shift->opening_cash + $cash - $refund,
                 'countedCash' => $shift->counted_cash,
                 'difference' => $shift->cash_difference,
+                // Only when someone other than the cashier closed it (DESIGN.md §13).
+                'closedBy' => $shift->closedByOther() ? $shift->closer?->name : null,
+                'closeReason' => $shift->closedByOther() ? $shift->close_reason : null,
             ];
             $rows[] = $row;
 
