@@ -3,9 +3,12 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Concerns\PasswordValidationRules;
+use App\Enums\AccountEventType;
 use App\Http\Controllers\Controller;
+use App\Services\Audit\AccountLog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
@@ -41,7 +44,10 @@ class ForcedPasswordController extends Controller
             throw ValidationException::withMessages(['password' => 'Pilih kata sandi yang berbeda dari kata sandi sementara.']);
         }
 
-        $user->forceFill(['password' => $data['password'], 'must_change_password' => false])->save();
+        DB::transaction(function () use ($user, $data) {
+            $user->forceFill(['password' => $data['password'], 'must_change_password' => false])->save();
+            AccountLog::record($user, AccountEventType::PasswordChanged, $user, ['via' => 'forced']);
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Kata sandi baru disimpan.']);
 

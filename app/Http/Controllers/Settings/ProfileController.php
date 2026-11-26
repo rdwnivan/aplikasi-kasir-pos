@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Enums\AccountEventType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
+use App\Services\Audit\AccountLog;
 use App\Support\DemoAccounts;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -47,7 +50,14 @@ class ProfileController extends Controller
             $request->user()->email_verified_at = null;
         }
 
-        $request->user()->save();
+        $user = $request->user();
+        $changes = AccountLog::changes($user, ['name', 'email']);
+        DB::transaction(function () use ($user, $changes) {
+            $user->save();
+            if ($changes !== []) {
+                AccountLog::record($user, AccountEventType::ProfileUpdated, $user, $changes);
+            }
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Profile updated.')]);
 

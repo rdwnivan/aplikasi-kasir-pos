@@ -36,7 +36,7 @@ Tujuan: project portofolio GitHub untuk posisi **fullstack web developer**, deng
 
 Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permission).
 
-Tidak ada pendaftaran mandiri: setiap akun harus punya role, jadi fitur `registration` Fortify dimatikan (halaman dan rute `/register` dihapus, 2026-11-23). Akun dibuat oleh owner di menu **Pengguna** (§12): tambah akun, ubah nama/email/role, nonaktifkan/aktifkan lagi (akun tidak pernah dihapus), reset kata sandi, hapus PIN owner lain, dan reset 2FA & passkey akun lain (§14). Owner tidak bisa menonaktifkan atau mengubah role dirinya sendiri, dan harus selalu ada minimal satu owner aktif.
+Tidak ada pendaftaran mandiri: setiap akun harus punya role, jadi fitur `registration` Fortify dimatikan (halaman dan rute `/register` dihapus, 2026-11-23). Akun dibuat oleh owner di menu **Pengguna** (§12): tambah akun, ubah nama/email/role, nonaktifkan/aktifkan lagi (akun tidak pernah dihapus), reset kata sandi, hapus PIN owner lain, dan reset 2FA & passkey akun lain (§14); semua perubahan akun tercatat di Pengguna → Riwayat akun (§15). Owner tidak bisa menonaktifkan atau mengubah role dirinya sendiri, dan harus selalu ada minimal satu owner aktif.
 
 ## 4. Model stok & HPP
 
@@ -94,7 +94,7 @@ Tidak ada pendaftaran mandiri: setiap akun harus punya role, jadi fitur `registr
 - ~~Owner menutup shift kasir lain~~ → selesai di v2, lihat §13
 - ~~Owner mereset 2FA/passkey akun lain~~ → selesai di v2, lihat §14
 - ~~Melindungi 2FA/passkey akun demo publik~~ → selesai, lihat §12.4.1
-- Log audit perubahan akun
+- ~~Log audit perubahan akun~~ → selesai di v2, lihat §15
 
 ## 7. Kualitas & demo
 
@@ -412,7 +412,7 @@ Aturan yang sama dengan kata sandi/email/PIN: **cara akun demo yang dilindungi m
 
 ### 12.6 Di luar cakupan
 
-Log audit siapa mengubah apa, reset 2FA/passkey milik orang lain (kemudian dikerjakan di §14), undangan lewat email, menutup shift orang lain (kemudian dikerjakan di §13), banyak role per akun, permission per fitur.
+Log audit siapa mengubah apa (kemudian dikerjakan di §15), reset 2FA/passkey milik orang lain (kemudian dikerjakan di §14), undangan lewat email, menutup shift orang lain (kemudian dikerjakan di §13), banyak role per akun, permission per fitur.
 
 ### 12.7 Rencana tes (ditulis lebih dulu)
 
@@ -525,3 +525,54 @@ Tujuan: pengguna yang kehilangan HP authenticator (atau perangkat yang menyimpan
 - Pengaman: akun sendiri ditolak; sesama owner dan akun nonaktif berhasil; akun tanpa 2FA/passkey ditolak; `pos.protect_demo_accounts = true` → akun demo ditolak, akun buatan sendiri tetap bisa.
 - `DemoAccounts::releaseSignIn()` tetap lulus `DemoAccountSignInTest` setelah memakai `forgetSecondFactors()`.
 - Props halaman Pengguna: `two_factor` dan `passkeys` benar, dan tidak ada kunci `two_factor_secret` / `two_factor_recovery_codes` / `credential` di respons.
+
+## 15. v2: Log audit perubahan akun (2026-11-26)
+
+Tujuan: owner bisa melihat **siapa mengubah akun siapa, kapan, dan apa yang berubah**, termasuk perubahan yang dilakukan pengguna pada akunnya sendiri (kata sandi, PIN, 2FA, passkey). Ini menjawab pertanyaan yang sejak §12–§14 hanya tersisa di log aplikasi (`Log::notice` di `ResetSignInFactors`) atau tidak tercatat sama sekali.
+
+### 15.1 Kondisi sekarang (hasil pemeriksaan)
+
+- Perubahan akun oleh owner semuanya lewat Action di `app/Actions/Users/*` (`CreateUser`, `UpdateUser`, `DeactivateUser`, `ReactivateUser`, `SetTemporaryPassword`, `ResetOwnerPin`, `ResetSignInFactors`), masing-masing dengan transaksinya sendiri.
+- Perubahan oleh pengguna sendiri tersebar: `ProfileController::update` (nama/email), `SecurityController::update` (kata sandi), `ForcedPasswordController::update` (kata sandi wajib), `OwnerPinController::update` (PIN), route vendor Fortify (2FA) dan Laravel Passkeys (passkey). Vendor memancarkan event setelah perubahan tersimpan: `TwoFactorAuthenticationEnabled/Confirmed/Disabled`, `RecoveryCodesGenerated`, `PasskeyRegistered`, `PasskeyDeleted`.
+- Perubahan oleh sistem: `DemoAccounts::releaseSignIn()` (membersihkan 2FA/passkey akun demo saat login).
+- Penutupan shift oleh owner sudah tercatat di `shifts.closed_by`/`close_reason` (§13), jadi bukan bagian log akun.
+
+### 15.2 Keputusan (disetujui 2026-11-26)
+
+- **Tabel baru `account_events`** (migrasi expand saja, §9.6): `id`, `user_id` (akun yang berubah, FK `restrictOnDelete`), `actor_id` (FK nullable; `null` = sistem), `type` (string, enum `App\Enums\AccountEventType`), `details` (json nullable), `created_at`. **Tanpa `updated_at`**: baris tidak pernah diubah atau dihapus oleh aplikasi, sama seperti `stock_movements`.
+- **Yang dicatat** (`type`):
+    - Oleh owner: `created`, `updated` (nama/email/role, lama → baru), `deactivated`, `reactivated`, `password_reset`, `pin_reset`, `sign_in_factors_reset` (punya 2FA atau tidak, jumlah passkey).
+    - Oleh pengguna sendiri: `profile_updated` (nama/email lama → baru), `password_changed` (dari Keamanan atau halaman wajib ganti), `pin_set`, `two_factor_enabled` (saat dikonfirmasi), `two_factor_disabled`, `recovery_codes_regenerated`, `passkey_added`, `passkey_removed`.
+    - Oleh sistem: `demo_sign_in_released` (hanya bila memang ada yang dibersihkan).
+- **Tidak pernah disimpan:** kata sandi, PIN, secret/kode pemulihan 2FA, `credential` passkey, maupun nama passkey (konsisten dengan §14.3). `details` hanya berisi nilai lama/baru untuk nama, email, role, serta angka/boolean.
+- **Tidak dicatat:** login berhasil/gagal dan logout (volume besar dan sudah dibatasi rate limiter; bisa jadi tambahan terpisah), alamat IP dan user agent (di demo publik semua pengunjung yang login sebagai owner bisa membuka log, jadi IP pengunjung lain akan bocor).
+- **Satu titik pencatatan:** service `App\Services\Audit\AccountLog::record(User $user, AccountEventType $type, ?User $actor, array $details = [])`.
+    - Action owner memanggilnya **di dalam transaksinya**, jadi log dan perubahan selalu sama-sama tersimpan atau sama-sama batal.
+    - Controller self-service yang kita miliki juga memanggilnya langsung.
+    - Event vendor (2FA, passkey) lewat listener; event itu dipancarkan setelah perubahan tersimpan, jadi tidak satu transaksi, dan ini diterima.
+    - `Log::notice` di `ResetSignInFactors` (§14) diganti dengan `AccountLog`.
+- **Tanpa backfill:** log mulai dari deploy ini. Halaman menyebutkan "Riwayat dicatat sejak {tanggal baris pertama}".
+- **Akun demo publik:** log tetap dicatat dan terlihat oleh owner pengunjung. Isinya hanya perubahan pada akun buatan pengunjung (akun demo tidak bisa diubah, §12.4), plus `demo_sign_in_released`.
+
+### 15.3 Tampilan (owner saja)
+
+- Halaman baru **Pengguna → Riwayat akun** (`GET /pengguna/riwayat`, route `users.events.index`, grup `role:owner`): tabel terbaru dulu (waktu, akun, oleh siapa / "Sistem" / "Sendiri", kejadian dalam bahasa Indonesia, rincian mis. "Role: Kasir → Staf Gudang"), filter akun dan jenis kejadian, paginasi 50 per halaman.
+- Menu aksi per baris di Pengguna mendapat **"Riwayat"** yang membuka halaman itu terfilter ke akun tersebut; tombol "Riwayat akun" di header halaman Pengguna.
+- Tidak ada ekspor Excel di versi ini.
+
+### 15.4 Rencana tes (ditulis lebih dulu)
+
+- Setiap Action owner menulis tepat satu baris dengan `actor_id` = owner dan `details` yang benar; Action yang ditolak (pengaman §12.3 / §14) tidak menulis apa pun (transaksi yang sama).
+- Self-service: profil, kata sandi (Keamanan dan wajib ganti), PIN, 2FA aktif/nonaktif/kode baru, passkey tambah/hapus menulis baris dengan `actor_id` = pengguna itu.
+- `DemoAccounts::releaseSignIn()` menulis `demo_sign_in_released` dengan `actor_id = null` hanya bila ada yang dibersihkan.
+- Tidak ada kata sandi, PIN, secret, kode pemulihan, `credential`, atau nama passkey di tabel maupun di props halaman.
+- Halaman: gudang/kasir 403; filter akun dan jenis bekerja; urutan terbaru dulu.
+- `DemoSalesSeeder` tetap jalan (seeder membuat akun lewat jalur yang tidak memanggil `AccountLog`, jadi log demo kosong sampai ada perubahan).
+
+### 15.5 Implementasi
+
+- Migrasi `2026_11_26_000002_create_account_events_table`, enum `App\Enums\AccountEventType` (dengan label Indonesia), model `App\Models\AccountEvent` (`UPDATED_AT = null`), service `App\Services\Audit\AccountLog` (`record()`, `changes()` untuk pasangan lama → baru, `describe()` untuk baris rincian di halaman, `listen()` untuk event vendor, dipasang di `AppServiceProvider`).
+- `CreateUser::handle()` dan `ReactivateUser::handle()` kini menerima `$actor` sebagai argumen pertama (sama dengan Action lain). `ReactivateUser` dan `ResetOwnerPin` kini memakai transaksi; `ReactivateUser` pada akun yang sudah aktif tidak mencatat apa pun. `UpdateUser` dan perubahan profil yang tidak mengubah apa pun tidak mencatat baris.
+- Pelaku untuk event vendor = pengguna yang sedang login (biasanya pemilik akun itu sendiri). `PasswordReset` (tautan lupa kata sandi) dicatat sebagai `password_changed` dengan `via: reset_link`.
+- `DemoAccounts::releaseSignIn()` hanya membersihkan dan mencatat bila memang ada 2FA/passkey.
+- Controller `Users/AccountEventController`, route `users.events.index`, halaman `resources/js/pages/users/events.tsx`; tes `tests/Feature/Users/AccountLogTest.php`.

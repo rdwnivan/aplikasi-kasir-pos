@@ -2,6 +2,7 @@
 
 use App\Enums\Role;
 use App\Http\Controllers\Auth\ForcedPasswordController;
+use App\Http\Controllers\Users\AccountEventController;
 use App\Http\Controllers\Users\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -13,6 +14,8 @@ Route::middleware(['auth', 'verified', 'role:'.Role::Owner->value])
     ->name('users.')
     ->group(function () {
         Route::get('/', [UserController::class, 'index'])->name('index');
+        // Before {user} routes; there is no GET {user}, but keep the literal path first anyway.
+        Route::get('riwayat', [AccountEventController::class, 'index'])->name('events.index');
         Route::post('/', [UserController::class, 'store'])->name('store');
         Route::put('{user}', [UserController::class, 'update'])->name('update');
         Route::post('{user}/nonaktifkan', [UserController::class, 'deactivate'])->name('deactivate');

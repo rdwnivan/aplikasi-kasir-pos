@@ -2,8 +2,10 @@
 
 namespace App\Actions\Users;
 
+use App\Enums\AccountEventType;
 use App\Enums\Role;
 use App\Models\User;
+use App\Services\Audit\AccountLog;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -33,7 +35,7 @@ final class UpdateUser
             }
         }
 
-        return DB::transaction(function () use ($user, $data, $current, $role) {
+        return DB::transaction(function () use ($actor, $user, $data, $current, $role) {
             if ($current === Role::Owner && $role !== Role::Owner) {
                 if ($user->isActive()) {
                     $this->ensureAnotherActiveOwner($user);
@@ -43,6 +45,10 @@ final class UpdateUser
             }
 
             $user->fill(['name' => $data['name'], 'email' => $data['email']]);
+            $changes = AccountLog::changes($user, ['name', 'email']);
+            if ($role !== $current) {
+                $changes['role'] = [$current?->value, $role->value];
+            }
             if ($user->email_verified_at === null) {
                 $user->forceFill(['email_verified_at' => now()]);
             }
@@ -50,6 +56,9 @@ final class UpdateUser
 
             if ($role !== $current) {
                 $user->syncRoles([$role->value]);
+            }
+            if ($changes !== []) {
+                AccountLog::record($user, AccountEventType::Updated, $actor, $changes);
             }
 
             return $user;

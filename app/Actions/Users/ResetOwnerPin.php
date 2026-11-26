@@ -2,8 +2,11 @@
 
 namespace App\Actions\Users;
 
+use App\Enums\AccountEventType;
 use App\Enums\Role;
 use App\Models\User;
+use App\Services\Audit\AccountLog;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Clears another owner's approval PIN (forgotten or leaked). Owners never set someone
@@ -23,8 +26,11 @@ final class ResetOwnerPin
         }
         $this->ensureNotProtected($user);
 
-        $user->forceFill(['pin_hash' => null])->save();
+        return DB::transaction(function () use ($actor, $user) {
+            $user->forceFill(['pin_hash' => null])->save();
+            AccountLog::record($user, AccountEventType::PinReset, $actor);
 
-        return $user;
+            return $user;
+        });
     }
 }

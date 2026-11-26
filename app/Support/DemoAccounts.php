@@ -2,7 +2,9 @@
 
 namespace App\Support;
 
+use App\Enums\AccountEventType;
 use App\Models\User;
+use App\Services\Audit\AccountLog;
 use Database\Seeders\DemoUserSeeder;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -35,6 +37,18 @@ final class DemoAccounts
             return;
         }
 
-        DB::transaction(fn () => $user->forgetSecondFactors());
+        DB::transaction(function () use ($user) {
+            $hadTwoFactor = $user->hasTwoFactorState();
+            $passkeys = $user->passkeys()->count();
+            if (! $hadTwoFactor && $passkeys === 0) {
+                return;
+            }
+
+            $user->forgetSecondFactors();
+            AccountLog::record($user, AccountEventType::DemoSignInReleased, null, [
+                'two_factor' => $hadTwoFactor,
+                'passkeys' => $passkeys,
+            ]);
+        });
     }
 }

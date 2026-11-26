@@ -2,8 +2,10 @@
 
 namespace App\Actions\Users;
 
+use App\Enums\AccountEventType;
 use App\Enums\Role;
 use App\Models\User;
+use App\Services\Audit\AccountLog;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -21,7 +23,7 @@ final class DeactivateUser
         }
         $this->ensureNotProtected($user);
 
-        return DB::transaction(function () use ($user) {
+        return DB::transaction(function () use ($actor, $user) {
             $locked = User::query()->lockForUpdate()->findOrFail($user->id);
 
             if (! $locked->isActive()) {
@@ -37,6 +39,7 @@ final class DeactivateUser
             $locked->forceFill(['deactivated_at' => now()]);
             $this->endSessions($locked);
             $locked->save();
+            AccountLog::record($locked, AccountEventType::Deactivated, $actor);
 
             return $locked;
         });

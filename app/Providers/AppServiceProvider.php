@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\Audit\AccountLog;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Support\Facades\Date;
@@ -26,6 +27,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        AccountLog::listen();
     }
 
     /**

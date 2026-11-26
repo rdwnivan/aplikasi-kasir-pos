@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Enums\AccountEventType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\PasswordUpdateRequest;
 use App\Http\Requests\Settings\TwoFactorAuthenticationRequest;
+use App\Services\Audit\AccountLog;
 use App\Support\DemoAccounts;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -63,9 +66,12 @@ class SecurityController extends Controller
             throw ValidationException::withMessages(['password' => DemoAccounts::MESSAGE]);
         }
 
-        $request->user()->update([
-            'password' => $request->password,
-        ]);
+        DB::transaction(function () use ($request) {
+            $request->user()->update([
+                'password' => $request->password,
+            ]);
+            AccountLog::record($request->user(), AccountEventType::PasswordChanged, $request->user(), ['via' => 'settings']);
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Password updated.')]);
 

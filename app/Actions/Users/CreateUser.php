@@ -2,8 +2,10 @@
 
 namespace App\Actions\Users;
 
+use App\Enums\AccountEventType;
 use App\Enums\Role;
 use App\Models\User;
+use App\Services\Audit\AccountLog;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -13,12 +15,13 @@ use Illuminate\Support\Facades\DB;
 final class CreateUser
 {
     /** @param array{name: string, email: string, role: Role, password: string} $data */
-    public function handle(array $data): User
+    public function handle(User $actor, array $data): User
     {
-        return DB::transaction(function () use ($data) {
+        return DB::transaction(function () use ($actor, $data) {
             $user = new User(['name' => $data['name'], 'email' => $data['email'], 'password' => $data['password']]);
             $user->forceFill(['email_verified_at' => now(), 'must_change_password' => true])->save();
             $user->assignRole($data['role']->value);
+            AccountLog::record($user, AccountEventType::Created, $actor, ['role' => $data['role']->value]);
 
             return $user;
         });

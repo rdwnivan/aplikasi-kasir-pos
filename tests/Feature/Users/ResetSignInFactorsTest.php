@@ -1,9 +1,10 @@
 <?php
 
+use App\Enums\AccountEventType;
 use App\Enums\Role;
+use App\Models\AccountEvent;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
-use Illuminate\Support\Facades\Log;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Passkeys\Passkey;
 
@@ -130,19 +131,17 @@ describe('resetting', function () {
         }
     });
 
-    it('logs who reset whom, without secrets', function () {
-        Log::spy();
+    it('records who reset whom in the account log, without secrets', function () {
         resetFactorsPasskey($this->cashier);
 
         $this->actingAs($this->owner)
             ->delete(route('users.sign-in-factors', $this->cashier), ['password' => 'password']);
 
-        Log::shouldHaveReceived('notice')->once()->withArgs(fn (string $message, array $context) => $context === [
-            'actor_id' => $this->owner->id,
-            'user_id' => $this->cashier->id,
-            'had_two_factor' => true,
-            'passkeys' => 1,
-        ]);
+        $event = AccountEvent::query()->sole();
+        expect($event->type)->toBe(AccountEventType::SignInFactorsReset)
+            ->and($event->user_id)->toBe($this->cashier->id)
+            ->and($event->actor_id)->toBe($this->owner->id)
+            ->and($event->details)->toBe(['two_factor' => true, 'passkeys' => 1]);
     });
 });
 

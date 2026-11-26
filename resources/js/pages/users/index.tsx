@@ -1,6 +1,7 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import {
     DoorClosed,
+    History,
     KeyRound,
     MoreHorizontal,
     Pencil,
@@ -142,9 +143,16 @@ export default function Users({ users: accounts, passwordRules }: Props) {
                     title="Pengguna"
                     description="Akun yang bisa masuk ke aplikasi. Akun tidak dihapus, hanya dinonaktifkan, supaya riwayat transaksi tetap utuh."
                     actions={
-                        <Button onClick={() => setEditing('new')}>
-                            <Plus /> Tambah pengguna
-                        </Button>
+                        <>
+                            <Button variant="outline" asChild>
+                                <Link href={users.events.index()}>
+                                    <History /> Riwayat akun
+                                </Link>
+                            </Button>
+                            <Button onClick={() => setEditing('new')}>
+                                <Plus /> Tambah pengguna
+                            </Button>
+                        </>
                     }
                 />
 
@@ -394,6 +402,15 @@ function RowActions({
             <DropdownMenuContent align="end">
                 <DropdownMenuItem onSelect={onEdit}>
                     <Pencil /> Ubah
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                    <Link
+                        href={users.events.index({
+                            query: { user: user.id },
+                        })}
+                    >
+                        <History /> Riwayat
+                    </Link>
                 </DropdownMenuItem>
                 {!user.is_self && (
                     <DropdownMenuItem

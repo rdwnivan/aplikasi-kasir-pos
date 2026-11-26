@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Enums\AccountEventType;
 use App\Http\Controllers\Controller;
+use App\Services\Audit\AccountLog;
 use App\Support\DemoAccounts;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -36,7 +39,10 @@ class OwnerPinController extends Controller
             throw ValidationException::withMessages(['pin' => DemoAccounts::MESSAGE]);
         }
 
-        $request->user()->forceFill(['pin_hash' => Hash::make($data['pin'])])->save();
+        DB::transaction(function () use ($request, $data) {
+            $request->user()->forceFill(['pin_hash' => Hash::make($data['pin'])])->save();
+            AccountLog::record($request->user(), AccountEventType::PinSet, $request->user());
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'PIN owner disimpan.']);
 

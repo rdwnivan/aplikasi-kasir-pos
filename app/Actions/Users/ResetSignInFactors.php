@@ -2,9 +2,10 @@
 
 namespace App\Actions\Users;
 
+use App\Enums\AccountEventType;
 use App\Models\User;
+use App\Services\Audit\AccountLog;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 /**
  * An owner's reset for someone who lost the phone holding their authenticator or passkey
@@ -35,10 +36,8 @@ final class ResetSignInFactors
             $this->endSessions($locked);
             $locked->save();
 
-            Log::notice('Owner reset 2FA and passkeys', [
-                'actor_id' => $actor->id,
-                'user_id' => $locked->id,
-                'had_two_factor' => $hadTwoFactor,
+            AccountLog::record($locked, AccountEventType::SignInFactorsReset, $actor, [
+                'two_factor' => $hadTwoFactor,
                 'passkeys' => $passkeys,
             ]);
 

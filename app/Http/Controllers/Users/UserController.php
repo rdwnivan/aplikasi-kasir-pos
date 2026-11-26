@@ -56,7 +56,7 @@ class UserController extends Controller
 
     public function store(UserRequest $request, CreateUser $create): RedirectResponse
     {
-        $user = $create->handle([...$request->account(), 'password' => $request->string('password')->toString()]);
+        $user = $create->handle($request->user(), [...$request->account(), 'password' => $request->string('password')->toString()]);
 
         return $this->done("Akun {$user->name} dibuat. Kata sandi awal harus diganti saat pertama masuk.");
     }
@@ -75,9 +75,9 @@ class UserController extends Controller
         return $this->done("Akun {$user->name} dinonaktifkan.");
     }
 
-    public function reactivate(User $user, ReactivateUser $reactivate): RedirectResponse
+    public function reactivate(Request $request, User $user, ReactivateUser $reactivate): RedirectResponse
     {
-        $reactivate->handle($user);
+        $reactivate->handle($request->user(), $user);
 
         return $this->done("Akun {$user->name} aktif lagi.");
     }
