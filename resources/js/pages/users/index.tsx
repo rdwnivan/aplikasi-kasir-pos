@@ -6,6 +6,7 @@ import {
     Pencil,
     Plus,
     ShieldOff,
+    Smartphone,
     UserCheck,
     UserX,
 } from 'lucide-react';
@@ -64,6 +65,9 @@ type Account = {
     active: boolean;
     deactivated_at: string | null;
     has_pin: boolean;
+    two_factor: boolean;
+    has_two_factor_state: boolean;
+    passkeys: number;
     must_change_password: boolean;
     has_open_shift: boolean;
     open_shift_id: number | null;
@@ -95,6 +99,9 @@ export default function Users({ users: accounts, passwordRules }: Props) {
     const [role, setRole] = useState<RoleName | 'all'>('all');
     const [editing, setEditing] = useState<Account | 'new' | null>(null);
     const [resetting, setResetting] = useState<Account | null>(null);
+    const [resettingFactors, setResettingFactors] = useState<Account | null>(
+        null,
+    );
     const [confirm, setConfirm] = useState<Confirm | null>(null);
     const [processing, setProcessing] = useState(false);
 
@@ -268,6 +275,16 @@ export default function Users({ users: accounts, passwordRules }: Props) {
                                                     Akun demo
                                                 </Badge>
                                             )}
+                                            {u.two_factor && (
+                                                <Badge variant="outline">
+                                                    2FA
+                                                </Badge>
+                                            )}
+                                            {u.passkeys > 0 && (
+                                                <Badge variant="outline">
+                                                    {u.passkeys} passkey
+                                                </Badge>
+                                            )}
                                         </div>
                                     </TableCell>
                                     <TableCell>
@@ -276,6 +293,9 @@ export default function Users({ users: accounts, passwordRules }: Props) {
                                             onEdit={() => setEditing(u)}
                                             onResetPassword={() =>
                                                 setResetting(u)
+                                            }
+                                            onResetFactors={() =>
+                                                setResettingFactors(u)
                                             }
                                             onConfirm={(kind) =>
                                                 setConfirm({ kind, user: u })
@@ -298,6 +318,10 @@ export default function Users({ users: accounts, passwordRules }: Props) {
                 account={resetting}
                 passwordRules={passwordRules}
                 onClose={() => setResetting(null)}
+            />
+            <SignInFactorsDialog
+                account={resettingFactors}
+                onClose={() => setResettingFactors(null)}
             />
             <ConfirmDialog
                 open={confirm !== null}
@@ -344,14 +368,17 @@ function RowActions({
     user,
     onEdit,
     onResetPassword,
+    onResetFactors,
     onConfirm,
 }: {
     user: Account;
     onEdit: () => void;
     onResetPassword: () => void;
+    onResetFactors: () => void;
     onConfirm: (kind: Confirm['kind']) => void;
 }) {
     const locked = user.is_protected;
+    const hasFactors = user.has_two_factor_state || user.passkeys > 0;
 
     return (
         <DropdownMenu>
@@ -374,6 +401,14 @@ function RowActions({
                         onSelect={onResetPassword}
                     >
                         <KeyRound /> Reset kata sandi
+                    </DropdownMenuItem>
+                )}
+                {!user.is_self && hasFactors && (
+                    <DropdownMenuItem
+                        disabled={locked}
+                        onSelect={onResetFactors}
+                    >
+                        <Smartphone /> Reset 2FA & passkey
                     </DropdownMenuItem>
                 )}
                 {!user.is_self && user.role === 'owner' && user.has_pin && (
@@ -660,6 +695,106 @@ function PasswordForm({
             <DialogFooter>
                 <Button type="submit" disabled={form.processing}>
                     Reset kata sandi
+                </Button>
+            </DialogFooter>
+        </form>
+    );
+}
+
+function SignInFactorsDialog({
+    account,
+    onClose,
+}: {
+    account: Account | null;
+    onClose: () => void;
+}) {
+    const key = useOpenKey(account !== null);
+
+    return (
+        <Dialog
+            open={account !== null}
+            onOpenChange={(open) => !open && onClose()}
+        >
+            <DialogContent className="sm:max-w-md">
+                {account !== null && (
+                    <SignInFactorsForm
+                        key={key}
+                        account={account}
+                        onDone={onClose}
+                    />
+                )}
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function SignInFactorsForm({
+    account,
+    onDone,
+}: {
+    account: Account;
+    onDone: () => void;
+}) {
+    const form = useForm({ password: '' });
+    const removed = [
+        account.two_factor
+            ? '2FA (aplikasi authenticator dan kode pemulihan)'
+            : account.has_two_factor_state
+              ? 'Pengaturan 2FA yang belum selesai'
+              : null,
+        account.passkeys > 0 ? `${account.passkeys} passkey` : null,
+    ].filter((item) => item !== null);
+
+    return (
+        <form
+            className="space-y-4"
+            onSubmit={(e) => {
+                e.preventDefault();
+                form.submit(users.signInFactors(account.id), {
+                    preserveScroll: true,
+                    onSuccess: onDone,
+                    onError: (errors) => errors.user && toastFirstError(errors),
+                });
+            }}
+        >
+            <DialogHeader>
+                <DialogTitle>Reset 2FA & passkey {account.name}?</DialogTitle>
+                <DialogDescription>
+                    {account.name} bisa masuk dengan kata sandinya saja, lalu
+                    memasang 2FA atau passkey baru di Pengaturan → Keamanan.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="text-sm">
+                <p className="font-medium">Yang dihapus:</p>
+                <ul className="mt-1 list-disc pl-5 text-muted-foreground">
+                    {removed.map((item) => (
+                        <li key={item}>{item}</li>
+                    ))}
+                </ul>
+            </div>
+            <p className="text-sm text-muted-foreground">
+                Sesi {account.name} yang sedang berjalan tidak berakhir. Bila
+                perangkatnya dicuri, reset juga kata sandinya agar semua sesinya
+                berakhir.
+            </p>
+            <div className="grid gap-2">
+                <Label htmlFor="owner-password">Kata sandi Anda</Label>
+                <PasswordInput
+                    id="owner-password"
+                    autoComplete="current-password"
+                    autoFocus
+                    value={form.data.password}
+                    onChange={(e) => form.setData('password', e.target.value)}
+                />
+                <InputError message={form.errors.password} />
+            </div>
+            <DialogFooter>
+                <Button
+                    type="submit"
+                    variant="destructive"
+                    disabled={form.processing || form.data.password === ''}
+                >
+                    Reset 2FA & passkey
                 </Button>
             </DialogFooter>
         </form>

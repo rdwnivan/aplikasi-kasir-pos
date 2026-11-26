@@ -6,6 +6,7 @@ use App\Actions\Users\CreateUser;
 use App\Actions\Users\DeactivateUser;
 use App\Actions\Users\ReactivateUser;
 use App\Actions\Users\ResetOwnerPin;
+use App\Actions\Users\ResetSignInFactors;
 use App\Actions\Users\SetTemporaryPassword;
 use App\Actions\Users\UpdateUser;
 use App\Concerns\PasswordValidationRules;
@@ -30,7 +31,7 @@ class UserController extends Controller
         $openShifts = Shift::query()->open()->pluck('id', 'user_id');
 
         return Inertia::render('users/index', [
-            'users' => User::query()->with('roles')->orderBy('name')->get()
+            'users' => User::query()->with('roles')->withCount('passkeys')->orderBy('name')->get()
                 ->map(fn (User $user) => [
                     'id' => $user->id,
                     'name' => $user->name,
@@ -39,6 +40,10 @@ class UserController extends Controller
                     'active' => $user->isActive(),
                     'deactivated_at' => $user->deactivated_at?->toIso8601String(),
                     'has_pin' => $user->pin_hash !== null,
+                    // Whether 2FA / passkeys are in use, never the secrets or the devices.
+                    'two_factor' => $user->hasEnabledTwoFactorAuthentication(),
+                    'has_two_factor_state' => $user->hasTwoFactorState(),
+                    'passkeys' => $user->passkeys_count,
                     'must_change_password' => $user->must_change_password,
                     'has_open_shift' => $openShifts->has($user->id),
                     'open_shift_id' => $openShifts->get($user->id),
@@ -91,6 +96,17 @@ class UserController extends Controller
         $reset->handle($request->user(), $user);
 
         return $this->done("PIN {$user->name} dihapus. Ia perlu mengatur PIN baru di Pengaturan.");
+    }
+
+    public function signInFactors(Request $request, User $user, ResetSignInFactors $reset): RedirectResponse
+    {
+        // The owner's own password: with a hijacked owner session, this is the step that would
+        // complete taking over another account (DESIGN.md §14.2).
+        $request->validate(['password' => ['required', 'string', 'current_password']], attributes: ['password' => 'kata sandi']);
+
+        $reset->handle($request->user(), $user);
+
+        return $this->done("2FA dan passkey {$user->name} dihapus. Ia bisa masuk dengan kata sandinya saja.");
     }
 
     private function done(string $message): RedirectResponse

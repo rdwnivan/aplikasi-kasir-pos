@@ -58,4 +58,30 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     {
         return $this->deactivated_at === null;
     }
+
+    /** Any 2FA state, confirmed or a setup left half-way. */
+    public function hasTwoFactorState(): bool
+    {
+        return $this->two_factor_secret !== null
+            || $this->two_factor_recovery_codes !== null
+            || $this->two_factor_confirmed_at !== null;
+    }
+
+    /**
+     * Drops 2FA (confirmed or not) and every passkey, so the account signs in with its password
+     * alone. Used by an owner's reset (ResetSignInFactors) and by DemoAccounts::releaseSignIn().
+     * Call inside a transaction.
+     */
+    public function forgetSecondFactors(): void
+    {
+        if ($this->hasTwoFactorState()) {
+            $this->forceFill([
+                'two_factor_secret' => null,
+                'two_factor_recovery_codes' => null,
+                'two_factor_confirmed_at' => null,
+            ])->save();
+        }
+
+        $this->passkeys()->delete();
+    }
 }

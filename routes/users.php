@@ -21,6 +21,9 @@ Route::middleware(['auth', 'verified', 'role:'.Role::Owner->value])
             ->middleware('throttle:20,1')
             ->name('password');
         Route::delete('{user}/pin', [UserController::class, 'pin'])->name('pin');
+        Route::delete('{user}/2fa', [UserController::class, 'signInFactors'])
+            ->middleware('throttle:6,1')
+            ->name('sign-in-factors');
     });
 
 // After an owner set the password: the user picks their own before anything else.

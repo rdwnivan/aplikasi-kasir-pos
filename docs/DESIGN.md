@@ -36,7 +36,7 @@ Tujuan: project portofolio GitHub untuk posisi **fullstack web developer**, deng
 
 Implementasi: `spatie/laravel-permission`, role tetap (tanpa UI pengaturan permission).
 
-Tidak ada pendaftaran mandiri: setiap akun harus punya role, jadi fitur `registration` Fortify dimatikan (halaman dan rute `/register` dihapus, 2026-11-23). Akun dibuat oleh owner di menu **Pengguna** (§12): tambah akun, ubah nama/email/role, nonaktifkan/aktifkan lagi (akun tidak pernah dihapus), reset kata sandi, dan hapus PIN owner lain. Owner tidak bisa menonaktifkan atau mengubah role dirinya sendiri, dan harus selalu ada minimal satu owner aktif.
+Tidak ada pendaftaran mandiri: setiap akun harus punya role, jadi fitur `registration` Fortify dimatikan (halaman dan rute `/register` dihapus, 2026-11-23). Akun dibuat oleh owner di menu **Pengguna** (§12): tambah akun, ubah nama/email/role, nonaktifkan/aktifkan lagi (akun tidak pernah dihapus), reset kata sandi, hapus PIN owner lain, dan reset 2FA & passkey akun lain (§14). Owner tidak bisa menonaktifkan atau mengubah role dirinya sendiri, dan harus selalu ada minimal satu owner aktif.
 
 ## 4. Model stok & HPP
 
@@ -92,7 +92,7 @@ Tidak ada pendaftaran mandiri: setiap akun harus punya role, jadi fitur `registr
 - Ekspor PDF
 - ~~Layar kelola pengguna~~ → selesai di v2, lihat §12
 - ~~Owner menutup shift kasir lain~~ → selesai di v2, lihat §13
-- Owner mereset 2FA/passkey akun lain
+- ~~Owner mereset 2FA/passkey akun lain~~ → selesai di v2, lihat §14
 - ~~Melindungi 2FA/passkey akun demo publik~~ → selesai, lihat §12.4.1
 - Log audit perubahan akun
 
@@ -406,7 +406,7 @@ Aturan yang sama dengan kata sandi/email/PIN: **cara akun demo yang dilindungi m
 
 ### 12.6 Di luar cakupan
 
-Log audit siapa mengubah apa, reset 2FA/passkey milik orang lain, undangan lewat email, menutup shift orang lain (kemudian dikerjakan di §13), banyak role per akun, permission per fitur.
+Log audit siapa mengubah apa, reset 2FA/passkey milik orang lain (kemudian dikerjakan di §14), undangan lewat email, menutup shift orang lain (kemudian dikerjakan di §13), banyak role per akun, permission per fitur.
 
 ### 12.7 Rencana tes (ditulis lebih dulu)
 
@@ -465,3 +465,57 @@ Tujuan: owner bisa menutup shift yang ditinggal terbuka (kasir pulang, perangkat
 - Konkurensi (PostgreSQL, `tests/Concurrency`): `CompleteSale` dan penutupan oleh owner berebut shift yang sama → sale tidak pernah tersimpan di shift yang sudah tertutup, dan `expected_cash` cocok dengan sale yang masuk.
 - `pos.protect_demo_accounts = true`: owner tetap bisa menutup shift akun kasir demo.
 - `DemoSalesSeeder` tetap jalan.
+
+## 14. v2: Owner mereset 2FA & passkey akun lain (2026-11-26)
+
+Tujuan: pengguna yang kehilangan HP authenticator (atau perangkat yang menyimpan passkey-nya hilang/dicuri) bisa masuk lagi **tanpa mengubah DB manual**: owner menghapus 2FA dan passkey akun itu dari halaman Pengguna, lalu pengguna masuk dengan kata sandi saja dan boleh memasang 2FA/passkey baru sendiri.
+
+### 14.1 Kondisi sekarang (hasil pemeriksaan)
+
+- 2FA (Fortify, `confirm: true`): kolom `users.two_factor_secret`, `two_factor_recovery_codes` (keduanya terenkripsi, `#[Hidden]`), `two_factor_confirmed_at`. Tantangan 2FA saat login hanya muncul bila `hasEnabledTwoFactorAuthentication()` (= secret ada **dan** sudah dikonfirmasi). Passkey (Laravel Passkeys lewat Fortify): tabel `passkeys` (`user_id` cascade, `name`, `credential_id`, `credential` JSON, `last_used_at`). Login passkey tidak melewati tantangan 2FA.
+- Jadi yang **mengunci** pengguna hanya 2FA. Passkey tidak pernah mengunci (login kata sandi tetap jalan), tetapi passkey di perangkat yang dicuri adalah jalan masuk bagi pencurinya.
+- Cara menghapus keduanya sudah ada di `DemoAccounts::releaseSignIn()` (kosongkan tiga kolom + `passkeys()->delete()`), hanya untuk akun demo saat login.
+- Pengguna sendiri bisa menonaktifkan 2FA / menghapus passkey di Pengaturan → Keamanan (`RequirePassword` di halaman itu, `password.confirm` di route vendor). Aksi di `/pengguna` tidak memakai konfirmasi kata sandi; route `password.confirm` Fortify bekerja dengan redirect halaman penuh, tidak cocok untuk aksi `DELETE` dari dialog.
+- Sesi berakhir hanya lewat `EnsureUserIsActive` (nonaktif) dan `AuthenticateSession` (hash kata sandi berubah); `endSessions()` di `GuardsAccounts` hanya mengganti `remember_token`.
+
+### 14.2 Keputusan (disetujui 2026-11-26)
+
+- **Satu aksi "Reset 2FA & passkey"**, bukan dua. Kasus utamanya satu HP hilang yang biasanya memegang authenticator dan passkey sekaligus; dua aksi menambah menu dan dialog tanpa kasus nyata yang butuh menghapus salah satu saja (pengguna yang masih bisa masuk mengatur sendiri di Keamanan). Yang dihapus: tiga kolom 2FA (termasuk setup yang belum dikonfirmasi) dan **semua** baris `passkeys` akun itu.
+- **Owner wajib mengetik kata sandinya sendiri di dialog** (aturan `current_password`, route `throttle:6,1`), bukan `password.confirm`. Alasannya: dengan sesi owner yang dibajak, "Reset kata sandi" + "Reset 2FA" bersama-sama = mengambil alih akun lain; 2FA-lah satu-satunya yang masih menahan, jadi langkah ini yang dikunci. Field di dialog lebih sederhana daripada redirect halaman konfirmasi. **Tanpa alasan wajib**: belum ada tempat menyimpannya (log audit masih roadmap, §6); dicatat di log aplikasi saja (lihat skema).
+- **Sesi yang sedang berjalan tidak diakhiri**, hanya `remember_token` diganti (`endSessions()`, sama dengan aksi lain). Mengakhiri sesi tanpa ganti kata sandi butuh kolom baru atau menghapus baris `sessions` (ditolak di §12.3 karena pengguna tidak melihat alasannya). Untuk perangkat yang **dicuri**, dialog menyarankan "Reset kata sandi" juga, yang mengakhiri semua sesi lewat `AuthenticateSession`.
+- **Login berikutnya bebas**: kata sandi saja, tanpa paksaan memasang 2FA lagi. Aplikasi tidak pernah mewajibkan 2FA, jadi memaksa sesudah reset akan jadi satu-satunya tempat 2FA wajib (dan butuh kolom + middleware seperti `RequirePasswordChange`). Toast sukses mengingatkan owner untuk menyampaikannya.
+- **Pengaman** (di Action, lewat `GuardsAccounts`):
+    - **Akun sendiri ditolak**: "Atur 2FA dan passkey Anda sendiri di Pengaturan → Keamanan." (sama dengan reset kata sandi/PIN).
+    - **Sesama owner boleh** — justru kasus terpenting (owner kedua kehilangan HP). Owner tunggal yang terkunci tetap butuh jalan lain; lihat poin opsional di bawah.
+    - **Akun nonaktif boleh** (tidak bisa masuk, jadi tidak ada risiko; berguna sebelum diaktifkan lagi).
+    - **Tidak ada yang direset** (tanpa 2FA dan tanpa passkey) → ditolak dengan pesan, dan item menu disembunyikan.
+- **Akun demo dilindungi**: ditolak dengan `DemoAccounts::MESSAGE` (`ensureNotProtected`), sama seperti semua aksi akun lain dan aturan §12.4.1 "tidak ada yang berubah". Dalam praktik item menunya hampir tidak pernah muncul untuk akun demo, karena akun itu tidak bisa punya 2FA/passkey, dan sisa lama sudah dibersihkan saat login kata sandi.
+- **Tanpa skema / migrasi.** "Siapa yang terakhir mereset" adalah bagian log audit (roadmap §6); satu kolom sekarang hanya akan menjawab satu kejadian terakhir. Sebagai gantinya `Log::notice('two-factor reset', [actor_id, user_id, had_two_factor, passkeys])` (tanpa data rahasia), yang terbaca di log runtime Vercel.
+- **Satu sumber kebenaran untuk "hapus 2FA & passkey"**: Action baru `App\Actions\Users\ResetSignInFactors` (aturan + log) memakai method kecil di model, mis. `User::forgetSecondFactors()`, yang juga dipakai `DemoAccounts::releaseSignIn()` menggantikan kode duplikatnya.
+
+### 14.3 Tampilan (halaman Pengguna)
+
+- Prop baru per baris: `two_factor` (bool, = `hasEnabledTwoFactorAuthentication()`), `has_two_factor_state` (bool, termasuk setup yang belum dikonfirmasi; menentukan apakah item menu muncul) dan `passkeys` (jumlah, `withCount`). Tidak ada secret, kode pemulihan, nama perangkat, atau `credential` yang dikirim.
+- Kolom Status mendapat badge **"2FA"** dan **"N passkey"** bila ada (di samping "Aktif", "Shift terbuka", dll.).
+- Menu baris: **"Reset 2FA & passkey"** (ikon `Smartphone`) di bawah "Reset kata sandi", hanya bila bukan akun sendiri dan ada yang bisa direset; nonaktif untuk akun demo terlindungi.
+- Dialog: judul "Reset 2FA & passkey {nama}?", daftar yang akan dihapus ("2FA (aplikasi authenticator dan kode pemulihan)" / "Pengaturan 2FA yang belum selesai", "2 passkey"), catatan "{nama} bisa masuk dengan kata sandi saja, lalu memasang 2FA/passkey baru di Pengaturan → Keamanan. Sesi yang sedang berjalan tidak berakhir; bila perangkatnya dicuri, reset juga kata sandinya.", input "Kata sandi Anda", tombol destruktif "Reset 2FA & passkey" (nonaktif selama kata sandi kosong).
+
+### 14.4 Route & implementasi
+
+- `DELETE /pengguna/{user}/2fa` → `UserController::signInFactors`, route `users.sign-in-factors`, grup `role:owner` yang sudah ada, `throttle:6,1`.
+- Action `ResetSignInFactors::handle(User $actor, User $user)`: tolak diri sendiri / akun demo / tidak ada yang direset → transaksi: `forgetSecondFactors()` + `endSessions()` → log. Baris akun dikunci (`lockForUpdate`) dan isinya dibaca ulang di transaksi. Validasi `current_password` di controller (`$request->validate`).
+- `User::hasTwoFactorState()` dan `User::forgetSecondFactors()`; `DemoAccounts::releaseSignIn()` kini memanggil yang kedua. Tes: `tests/Feature/Users/ResetSignInFactorsTest.php`.
+
+### 14.5 Tidak dikerjakan
+
+- **Owner tunggal yang terkunci**: perintah `php artisan user:reset-2fa {email}` (memakai Action yang sama, aktor = `null`/sistem) agar tidak perlu SQL manual. Di demo live perintah ini hanya bisa dijalankan dari runner CI/Neon, jadi gunanya terutama untuk instalasi toko sungguhan. Diputuskan tidak dibuat (2026-11-26); owner tunggal yang terkunci tetap butuh perubahan DB manual.
+
+### 14.6 Rencana tes (ditulis lebih dulu)
+
+- Akses: gudang/kasir 403, tamu ke login.
+- Reset akun dengan 2FA terkonfirmasi + 2 passkey: ketiga kolom kosong, 0 passkey, `remember_token` berganti; passkey akun lain tidak tersentuh; login kata sandi berikutnya langsung masuk tanpa tantangan 2FA (tidak diarahkan ke `two-factor.login`).
+- Setup 2FA yang belum dikonfirmasi saja juga bisa direset.
+- Kata sandi owner salah/kosong → 422, tidak ada yang berubah.
+- Pengaman: akun sendiri ditolak; sesama owner dan akun nonaktif berhasil; akun tanpa 2FA/passkey ditolak; `pos.protect_demo_accounts = true` → akun demo ditolak, akun buatan sendiri tetap bisa.
+- `DemoAccounts::releaseSignIn()` tetap lulus `DemoAccountSignInTest` setelah memakai `forgetSecondFactors()`.
+- Props halaman Pengguna: `two_factor` dan `passkeys` benar, dan tidak ada kunci `two_factor_secret` / `two_factor_recovery_codes` / `credential` di respons.
