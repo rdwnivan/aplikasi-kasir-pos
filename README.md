@@ -97,7 +97,7 @@ For Midtrans, set the payment notification URL to `https://<your-project>.vercel
 
 Owner approval PIN for returns: `1234`.
 
-On the public demo (`POS_PROTECT_DEMO_ACCOUNTS=true`, set in the `Dockerfile`) these three accounts cannot be deactivated, re-roled, or have their email, password or PIN changed, so they keep working for the next visitor. To try user management, add an account of your own under **Pengguna**. Turn the setting off for a store with real accounts.
+On the public demo (`POS_PROTECT_DEMO_ACCOUNTS=true`, set in the `Dockerfile`) these three accounts cannot be deactivated, re-roled, or have their email, password or PIN changed, and they cannot turn on two-factor authentication or add or remove passkeys (Pengaturan → Keamanan shows why), so they keep working for the next visitor. A 2FA or passkey left on one of them from before is removed at its next password login. To try user management, add an account of your own under **Pengguna**. Turn the setting off for a store with real accounts.
 
 ## Tests
 

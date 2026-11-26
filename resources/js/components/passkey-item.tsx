@@ -14,7 +14,8 @@ import type { Passkey } from '@/types/auth';
 
 type Props = {
     passkey: Passkey;
-    onDelete: (id: number, onError: () => void) => void;
+    /** Left out when passkeys can't be changed (a protected demo account). */
+    onDelete?: (id: number, onError: () => void) => void;
 };
 
 export default function PasskeyItem({ passkey, onDelete }: Props) {
@@ -22,7 +23,7 @@ export default function PasskeyItem({ passkey, onDelete }: Props) {
 
     const handleDelete = () => {
         setIsDeleting(true);
-        onDelete(passkey.id, () => setIsDeleting(false));
+        onDelete?.(passkey.id, () => setIsDeleting(false));
     };
 
     return (
@@ -56,37 +57,39 @@ export default function PasskeyItem({ passkey, onDelete }: Props) {
                 </div>
             </div>
 
-            <Dialog>
-                <DialogTrigger asChild>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    >
-                        <Trash2 className="h-4 w-4" />
-                        <span className="sr-only">Hapus</span>
-                    </Button>
-                </DialogTrigger>
-                <DialogContent>
-                    <DialogTitle>Hapus passkey</DialogTitle>
-                    <DialogDescription>
-                        Yakin ingin menghapus passkey "{passkey.name}"? Passkey
-                        ini tidak bisa dipakai lagi untuk masuk.
-                    </DialogDescription>
-                    <DialogFooter className="gap-2">
-                        <DialogClose asChild>
-                            <Button variant="secondary">Batal</Button>
-                        </DialogClose>
+            {onDelete && (
+                <Dialog>
+                    <DialogTrigger asChild>
                         <Button
-                            variant="destructive"
-                            onClick={handleDelete}
-                            disabled={isDeleting}
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                         >
-                            {isDeleting ? 'Menghapus…' : 'Hapus passkey'}
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Hapus</span>
                         </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogTitle>Hapus passkey</DialogTitle>
+                        <DialogDescription>
+                            Yakin ingin menghapus passkey "{passkey.name}"?
+                            Passkey ini tidak bisa dipakai lagi untuk masuk.
+                        </DialogDescription>
+                        <DialogFooter className="gap-2">
+                            <DialogClose asChild>
+                                <Button variant="secondary">Batal</Button>
+                            </DialogClose>
+                            <Button
+                                variant="destructive"
+                                onClick={handleDelete}
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? 'Menghapus…' : 'Hapus passkey'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
         </div>
     );
 }

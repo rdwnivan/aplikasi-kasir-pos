@@ -92,7 +92,8 @@ Tidak ada pendaftaran mandiri: setiap akun harus punya role, jadi fitur `registr
 - Ekspor PDF
 - ~~Layar kelola pengguna~~ → selesai di v2, lihat §12
 - Owner menutup shift kasir lain (mis. kasir pulang dengan shift terbuka; sekarang akun itu juga tidak bisa dinonaktifkan sampai shift-nya ditutup)
-- Owner mereset 2FA/passkey akun lain, dan melindungi 2FA/passkey akun demo publik (§12.4)
+- Owner mereset 2FA/passkey akun lain
+- ~~Melindungi 2FA/passkey akun demo publik~~ → selesai, lihat §12.4.1
 - Log audit perubahan akun
 
 ## 7. Kualitas & demo
@@ -362,7 +363,27 @@ Tujuan: owner bisa **menambah akun, mengubah nama/email/role, menonaktifkan dan 
 
 Akun demo dibuka untuk umum dengan kata sandi yang tertulis di README, jadi pengunjung bisa saja menonaktifkan owner demo atau mengganti kata sandinya. Konfigurasi baru `pos.protect_demo_accounts` (env `POS_PROTECT_DEMO_ACCOUNTS`, default `false`; diisi `true` di blok `ENV` `Dockerfile`, bukan lewat pengaturan Vercel): ketiga akun dari `DemoUserSeeder` tidak bisa dinonaktifkan, diubah role/emailnya, direset kata sandi/PIN-nya, dan juga tidak bisa mengganti kata sandi, email, maupun PIN-nya sendiri di Pengaturan. Akun baru yang dibuat pengunjung bisa dikelola penuh. Lokal dan tes memakai default `false`.
 
-Celah yang **belum** ditutup (sudah ada sebelum §12): pengunjung masih bisa mengaktifkan 2FA atau mendaftarkan passkey di akun demo (Pengaturan → Keamanan). 2FA yang diaktifkan pengunjung akan mengunci akun demo itu bagi orang lain, dan sejauh ini hanya bisa dipulihkan dengan `demo-db` mode `reset` atau mengosongkan kolom 2FA di DB. Dicatat di roadmap §6.
+Celah yang tersisa setelah §12 (sudah ada sebelumnya): pengunjung masih bisa mengaktifkan 2FA atau mendaftarkan passkey di akun demo (Pengaturan → Keamanan). 2FA yang diaktifkan pengunjung mengunci akun demo itu bagi orang lain, dan hanya bisa dipulihkan dengan `demo-db` mode `reset` atau mengosongkan kolom 2FA di DB. Ditutup di §12.4.1.
+
+#### 12.4.1 2FA dan passkey akun demo (2026-11-26)
+
+Aturan yang sama dengan kata sandi/email/PIN: **cara akun demo yang dilindungi masuk tidak bisa diubah siapa pun**. Tanpa skema baru, tanpa migrasi.
+
+- **Blokir di middleware `ProtectDemoAccountSignIn`** (grup `web`, setelah `EnsureUserIsActive`). Route 2FA (Fortify) dan passkey (Laravel Passkeys) sama-sama memakai middleware `web` (`fortify.middleware`, `passkeys.middleware`), jadi satu middleware menjangkau semuanya tanpa mengubah vendor. Daftar nama route yang ditolak bila `DemoAccounts::isProtected($request->user())`:
+  `two-factor.enable`, `two-factor.confirm`, `two-factor.regenerate-recovery-codes`, `two-factor.disable`, `passkey.registration-options`, `passkey.store`, `passkey.destroy`.
+  Jawaban: request Inertia/biasa → `ValidationException` dengan `DemoAccounts::MESSAGE` (redirect back + error, seperti `SecurityController::update`); request JSON non-Inertia (`passkey.registration-options` dan `passkey.store` dipanggil `fetch` dari `usePasskeyRegister`) → **403** `{ message }`. Middleware berjalan sebelum `password.confirm` milik route itu, jadi pengunjung tidak diminta konfirmasi kata sandi dulu hanya untuk ditolak.
+  Alternatif yang ditimbang: mengganti binding action Fortify (`EnableTwoFactorAuthentication`, dll.) di container. Ditolak karena Laravel Passkeys tidak punya titik serupa untuk registrasi, dan hasilnya dua mekanisme untuk satu aturan; event Fortify terjadi setelah perubahan tersimpan.
+- **`two-factor.disable` dan `passkey.destroy` ikut ditolak.** Pemulihan tidak butuh keduanya (lihat poin berikut), dan satu aturan "tidak ada yang berubah" lebih mudah diuji dan dijelaskan daripada "boleh menghapus, tidak boleh menambah". Route baca (`two-factor.qr-code`, `two-factor.secret-key`, `two-factor.recovery-codes`) tidak diblokir: tanpa `enable` isinya kosong.
+- **Akun demo di DB live yang sudah terlanjur punya 2FA/passkey pulih sendiri saat login kata sandi berikutnya.** Di `Fortify::authenticateUsing`, setelah kata sandi cocok dan akun dilindungi: kolom `two_factor_secret`, `two_factor_recovery_codes`, `two_factor_confirmed_at` dikosongkan dan baris `passkeys` milik akun itu dihapus, sebelum `RedirectIfTwoFactorAuthenticatable` memeriksa 2FA pada model yang sama. Jadi tidak ada tantangan 2FA, tidak perlu `demo-db` mode `reset`, dan tidak perlu akses ke DB Neon. Kata sandi akun demo tetap `password` (tidak bisa diganti), jadi ini tidak membuka akses baru. Login lewat passkey lama tidak memicu pembersihan (passkey itu hanya bisa dipakai pemilik perangkatnya), tetapi login kata sandi siapa pun berikutnya menghapusnya.
+- **UI:** `SecurityController::edit` mengirim prop `signInLocked` (= `DemoAccounts::isProtected`). Bila `true`, bagian 2FA dan passkey tetap tampil (judul, status 2FA, daftar passkey), tetapi tombol Aktifkan/Nonaktifkan 2FA, Tambah passkey, dan Hapus passkey tidak ditampilkan. Sebagai gantinya muncul catatan (`demo-sign-in-note.tsx`) bahwa 2FA dan passkey tidak bisa diubah di akun demo publik, dengan saran membuat akun baru. Server tetap menolak walau route-nya dipanggil manual.
+- Implementasi: `App\Http\Middleware\ProtectDemoAccountSignIn`, `DemoAccounts::releaseSignIn()` (dipanggil dari `Fortify::authenticateUsing` di `FortifyServiceProvider`), tes di `tests/Feature/Settings/DemoAccountSignInTest.php`.
+- **Tidak berubah:** akun lain (termasuk akun buatan pengunjung) memakai 2FA dan passkey seperti biasa, juga di demo publik; dengan `POS_PROTECT_DEMO_ACCOUNTS=false` (lokal, tes default) semua akun, termasuk tiga akun demo, tidak terpengaruh, dan login tidak membersihkan apa pun.
+- **Tes (ditulis lebih dulu):**
+    - Dataset tujuh route: akun demo dilindungi → ditolak (redirect + error, atau 403 untuk JSON) dan kolom 2FA / jumlah `passkeys` tidak berubah, termasuk saat 2FA/passkey sudah ada (untuk `disable`/`destroy`).
+    - Akun bukan demo dengan pengaturan nyala → `enable`/`confirm`/`regenerate`/`disable` benar-benar jalan, `registration-options` 200, `destroy` menghapus passkey miliknya; `passkey.store` cukup dibuktikan tidak ditolak middleware (kredensial WebAuthn asli tidak bisa dibuat di tes).
+    - Pengaturan mati → akun demo bisa mengaktifkan 2FA dan menghapus passkey.
+    - Login kata sandi akun demo yang punya 2FA terkonfirmasi + passkey: pengaturan nyala → langsung masuk, kolom kosong, passkey terhapus; pengaturan mati → tetap ke tantangan 2FA, tidak ada yang dihapus.
+    - Props halaman Keamanan: `signInLocked` true/false sesuai akun dan pengaturan.
 
 ### 12.5 Layar & route (`role:owner`; gudang dan kasir 403)
 

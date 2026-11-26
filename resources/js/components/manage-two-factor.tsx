@@ -1,6 +1,7 @@
 import { Form } from '@inertiajs/react';
 import { ShieldCheck } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import DemoSignInNote from '@/components/demo-sign-in-note';
 import Heading from '@/components/heading';
 import TwoFactorRecoveryCodes from '@/components/two-factor-recovery-codes';
 import TwoFactorSetupModal from '@/components/two-factor-setup-modal';
@@ -12,6 +13,8 @@ export type Props = {
     canManageTwoFactor?: boolean;
     requiresConfirmation?: boolean;
     twoFactorEnabled?: boolean;
+    /** A protected demo account: the status is shown, 2FA can't be turned on or off. */
+    signInLocked?: boolean;
 };
 
 export default function ManageTwoFactor(props: Props) {
@@ -42,6 +45,24 @@ export default function ManageTwoFactor(props: Props) {
 
     if (!(props.canManageTwoFactor ?? false)) {
         return null;
+    }
+
+    if (props.signInLocked ?? false) {
+        return (
+            <div className="space-y-6">
+                <Heading
+                    variant="small"
+                    title="Autentikasi dua langkah"
+                    description="Kelola autentikasi dua langkah (2FA)"
+                />
+                <p className="text-sm text-muted-foreground">
+                    {twoFactorEnabled
+                        ? '2FA aktif di akun ini. Akan dimatikan otomatis saat login berikutnya.'
+                        : '2FA tidak aktif di akun ini.'}
+                </p>
+                <DemoSignInNote />
+            </div>
+        );
     }
 
     return (

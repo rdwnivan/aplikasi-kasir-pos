@@ -130,11 +130,13 @@ export default function Security(props: Props) {
                 canManageTwoFactor={props.canManageTwoFactor}
                 requiresConfirmation={props.requiresConfirmation}
                 twoFactorEnabled={props.twoFactorEnabled}
+                signInLocked={props.signInLocked}
             />
 
             <ManagePasskeys
                 canManagePasskeys={props.canManagePasskeys}
                 passkeys={props.passkeys}
+                signInLocked={props.signInLocked}
             />
         </>
     );

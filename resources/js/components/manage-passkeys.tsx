@@ -1,6 +1,7 @@
 import { router } from '@inertiajs/react';
 import { KeyRound } from 'lucide-react';
 import { destroy } from '@/actions/Laravel/Passkeys/Http/Controllers/PasskeyRegistrationController';
+import DemoSignInNote from '@/components/demo-sign-in-note';
 import Heading from '@/components/heading';
 import PasskeyItem from '@/components/passkey-item';
 import PasskeyRegistration from '@/components/passkey-register';
@@ -9,6 +10,8 @@ import type { Passkey } from '@/types/auth';
 export type Props = {
     canManagePasskeys?: boolean;
     passkeys?: Passkey[];
+    /** A protected demo account: the list is shown, nothing can be added or removed. */
+    signInLocked?: boolean;
 };
 
 const EmptyState = () => {
@@ -27,6 +30,7 @@ const EmptyState = () => {
 
 export default function ManagePasskeys(props: Props) {
     const passkeys = props.passkeys ?? [];
+    const locked = props.signInLocked ?? false;
 
     const handleDelete = (id: number, onError: () => void) => {
         router.delete(destroy.url(id), {
@@ -57,7 +61,7 @@ export default function ManagePasskeys(props: Props) {
                         <PasskeyItem
                             key={passkey.id}
                             passkey={passkey}
-                            onDelete={handleDelete}
+                            onDelete={locked ? undefined : handleDelete}
                         />
                     ))
                 ) : (
@@ -65,7 +69,11 @@ export default function ManagePasskeys(props: Props) {
                 )}
             </div>
 
-            <PasskeyRegistration onSuccess={handleRegisterSuccess} />
+            {locked ? (
+                <DemoSignInNote />
+            ) : (
+                <PasskeyRegistration onSuccess={handleRegisterSuccess} />
+            )}
         </div>
     );
 }

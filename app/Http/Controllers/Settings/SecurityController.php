@@ -40,6 +40,8 @@ class SecurityController extends Controller
                     ->all()
                 : [],
             'passwordRules' => Password::defaults()->toPasswordRulesString(),
+            // A protected demo account can't change 2FA or passkeys (ProtectDemoAccountSignIn).
+            'signInLocked' => DemoAccounts::isProtected($request->user()),
         ];
 
         if (Features::canManageTwoFactorAuthentication()) {

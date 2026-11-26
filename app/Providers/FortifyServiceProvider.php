@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Actions\Fortify\ResetUserPassword;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Models\User;
+use App\Support\DemoAccounts;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -56,6 +57,8 @@ class FortifyServiceProvider extends ServiceProvider
             if (! $user->isActive()) {
                 throw ValidationException::withMessages([Fortify::username() => EnsureUserIsActive::MESSAGE]);
             }
+            // Fortify checks for 2FA on this same model right after, so this login gets no challenge.
+            DemoAccounts::releaseSignIn($user);
 
             return $user;
         });

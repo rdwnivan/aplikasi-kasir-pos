@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\ProtectDemoAccountSignIn;
 use App\Http\Middleware\RequirePasswordChange;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -32,6 +33,8 @@ return Application::configure(basePath: dirname(__DIR__))
             AuthenticateSession::class,
             EnsureUserIsActive::class,
             RequirePasswordChange::class,
+            // The public demo's shared accounts keep signing in with just their password.
+            ProtectDemoAccountSignIn::class,
             HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
