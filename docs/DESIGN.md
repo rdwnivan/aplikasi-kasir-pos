@@ -132,6 +132,11 @@ Tidak ada pendaftaran mandiri: setiap akun harus punya role, jadi fitur `registr
 
 ### Belum terverifikasi
 
+- **Cek demo live yang ditunda (butuh pemilik repo, dicatat 2026-11-26).** Claude tidak mengetik kata sandi di produksi, jadi langkah ini menunggu pemilik repo:
+    - Reset 2FA & passkey (§14) alur penuh: owner membuat akun uji (kata sandi awal diketik pemilik), pemilik login sebagai akun itu, mengganti kata sandi, dan memasang 2FA dengan authenticator di HP; lalu owner mereset (kata sandi owner di dialog diketik pemilik). Yang sudah terbukti di live hanya props, menu, dan penolakan 422 tanpa kata sandi.
+    - Kelola pengguna (§12) di live: tambah, reset kata sandi, dan nonaktifkan akun uji (kata sandi diketik pemilik).
+    - Split payment (§11): dialog "Transaksi berhasil" dan apakah pelunasan datang dari webhook atau polling (perlu tab kasir yang tetap terbuka saat membayar, atau tab ditutup untuk menguji webhook saja).
+    - Shift kasir demo yang dibuka saat cek split payment (26 Nov 2026, 20.58) masih terbuka di DB demo; tutup dari akun kasir atau oleh owner (§13).
 - **`sail up`.** `compose.yaml` dan `docker/sail-start.sh` sudah ditulis, tetapi container belum pernah dijalankan. Belum bisa dicek karena Docker tidak terpasang di mesin pengembangan (2026-11-22).
 
 ## 9. Keputusan implementasi (2026-11-22)
