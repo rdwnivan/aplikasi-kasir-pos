@@ -59,7 +59,9 @@ final class MidtransClient
      */
     public function status(string $orderId): array
     {
-        return $this->send('get', '/v2/'.rawurlencode($orderId).'/status');
+        // An expired transaction comes back as status_code 407 ("Success, transaction is
+        // found", transaction_status "expire"); it is an answer, not an error.
+        return $this->send('get', '/v2/'.rawurlencode($orderId).'/status', answers: ['407']);
     }
 
     /**
@@ -114,11 +116,12 @@ final class MidtransClient
 
     /**
      * @param  array<string, mixed>  $payload
+     * @param  list<string>  $answers  non-2xx body status codes that still carry a transaction_status
      * @return array<string, mixed>
      *
      * @throws MidtransException
      */
-    private function send(string $method, string $path, array $payload = []): array
+    private function send(string $method, string $path, array $payload = [], array $answers = []): array
     {
         if (! $this->isConfigured()) {
             throw new MidtransException('Midtrans belum dikonfigurasi (MIDTRANS_SERVER_KEY kosong).');
@@ -136,8 +139,10 @@ final class MidtransClient
         $body = is_array($body) ? $body : [];
         $statusCode = (string) ($body['status_code'] ?? $response->status());
 
+        $isAnswer = in_array($statusCode, $answers, true) && isset($body['transaction_status']);
+
         // Midtrans reports API errors in the body's status_code, sometimes with HTTP 200.
-        if ($response->failed() || ! str_starts_with($statusCode, '2')) {
+        if ($response->failed() || (! str_starts_with($statusCode, '2') && ! $isAnswer)) {
             Log::warning('Midtrans request failed', [
                 'path' => $path,
                 'http_status' => $response->status(),

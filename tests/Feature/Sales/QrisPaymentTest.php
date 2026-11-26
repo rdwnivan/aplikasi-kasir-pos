@@ -18,6 +18,7 @@ use App\Reports\ShiftRecap;
 use App\Services\Inventory\StockLedger;
 use App\Support\DateRange;
 use Database\Seeders\RoleSeeder;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
@@ -78,8 +79,16 @@ function fakeMidtrans(string $statusAfter = 'pending'): void
         if (str_ends_with($url, '/status')) {
             $status = test()->midtransStatus;
 
+            // Midtrans's own status codes for a found transaction: an expired one is 407 with
+            // HTTP 200, as seen against the sandbox on 2026-11-26 (DESIGN.md §8).
             return Http::response([
-                'status_code' => $status === 'settlement' ? '200' : '201',
+                'status_code' => match ($status) {
+                    'settlement', 'capture', 'cancel' => '200',
+                    'deny' => '202',
+                    'expire' => '407',
+                    default => '201',
+                },
+                'status_message' => $status === 'expire' ? 'Success, transaction is found' : 'Success',
                 'transaction_status' => $status,
             ]);
         }
@@ -261,6 +270,30 @@ it('learns about the payment by polling Midtrans when no webhook arrives', funct
         ->assertInertia(fn (Assert $page) => $page->where('lastSale.number', $sale->number));
     $this->actingAs($this->cashier)->get(route('pos.index'))
         ->assertInertia(fn (Assert $page) => $page->where('lastSale', null));
+});
+
+it('cancels an expired QR by polling, although Midtrans answers 407', function () {
+    fakeMidtrans('pending');
+    $sale = startSplit(5000);
+
+    fakeMidtrans('expire');
+    $this->actingAs($this->cashier)->getJson(route('pos.qris.show', $sale))
+        ->assertOk()->assertJson(['status' => 'cancelled']);
+
+    expect($sale->fresh()->status)->toBe(SaleStatus::Cancelled)
+        ->and($this->product->fresh()->stock_on_hand)->toBe(10)
+        ->and($this->shift->fresh()->expectedCash())->toBe(50000);
+});
+
+it('still treats a real Midtrans error on a status check as no news', function () {
+    fakeMidtrans('pending');
+    $sale = startQris();
+    // Later fakes never override the first one, so swap the whole stub for this check.
+    Http::swap(new Factory);
+    Http::fake(['*' => Http::response(['status_code' => '404', 'status_message' => "Transaction doesn't exist."])]);
+
+    $this->actingAs($this->cashier)->getJson(route('pos.qris.show', $sale))
+        ->assertOk()->assertJson(['status' => 'pending_payment']);
 });
 
 it('throttles live status checks while polling', function () {
