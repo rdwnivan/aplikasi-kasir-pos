@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { FileSpreadsheet } from 'lucide-react';
+import { FileSpreadsheet, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { cn } from '@/lib/utils';
@@ -69,12 +69,24 @@ export function StatCard({
 }
 
 /** Plain link (not an Inertia visit): the server answers with an .xlsx file. */
-export function ExportButton({ href }: { href: string }) {
+/**
+ * Excel and PDF downloads of the report on screen, with its filters. The PDF link has no
+ * `download` attribute: when the server refuses a PDF that is too long it redirects back
+ * here with a toast, which a download would save as a file instead.
+ */
+export function ExportButtons({ excel, pdf }: { excel: string; pdf: string }) {
     return (
-        <Button variant="outline" size="sm" asChild className="sm:ml-auto">
-            <a href={href} download>
-                <FileSpreadsheet /> Ekspor Excel
-            </a>
-        </Button>
+        <div className="flex gap-2 sm:ml-auto">
+            <Button variant="outline" size="sm" asChild>
+                <a href={excel} download>
+                    <FileSpreadsheet /> Ekspor Excel
+                </a>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+                <a href={pdf}>
+                    <FileText /> Ekspor PDF
+                </a>
+            </Button>
+        </div>
     );
 }

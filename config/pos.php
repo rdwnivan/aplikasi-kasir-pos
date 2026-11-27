@@ -37,4 +37,11 @@ return [
     // On a public demo, the seeded accounts (passwords in the README) cannot be deactivated,
     // re-roled or have their email, password or PIN changed. See App\Support\DemoAccounts.
     'protect_demo_accounts' => (bool) env('POS_PROTECT_DEMO_ACCOUNTS', false),
+
+    'exports' => [
+        // dompdf gets slow and memory-hungry on big tables, so a PDF table with more cells
+        // than this (rows × columns) is refused; Excel has no limit. 6.500 cells took 3,5 s
+        // and 182 MB of the 256 MB memory_limit. See docs/DESIGN.md §16.
+        'pdf_max_cells' => (int) env('POS_PDF_MAX_CELLS', 6500),
+    ],
 ];

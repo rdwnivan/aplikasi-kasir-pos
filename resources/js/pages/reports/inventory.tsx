@@ -1,7 +1,7 @@
 import { Head, Link } from '@inertiajs/react';
 import { PageHeader } from '@/components/page-header';
 import {
-    ExportButton,
+    ExportButtons,
     ReportNav,
     StatCard,
 } from '@/components/reports/report-nav';
@@ -52,7 +52,10 @@ export default function InventoryReport({
                 />
                 <ReportNav />
                 <div className="flex">
-                    <ExportButton href={reports.export.inventory.url()} />
+                    <ExportButtons
+                        excel={reports.export.inventory.url()}
+                        pdf={reports.pdf.inventory.url()}
+                    />
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-3">

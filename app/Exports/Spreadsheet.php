@@ -19,6 +19,9 @@ final class Spreadsheet
 {
     public const RUPIAH = '"Rp" #,##0;-"Rp" #,##0';
 
+    /** Average cost (HPP rata-rata), which keeps its decimals. */
+    public const RUPIAH_CENTS = '"Rp" #,##0.00';
+
     public const NUMBER = '#,##0';
 
     public const PERCENT = '0.0"%"';

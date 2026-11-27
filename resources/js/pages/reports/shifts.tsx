@@ -1,7 +1,7 @@
 import { Head, Link } from '@inertiajs/react';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { PageHeader } from '@/components/page-header';
-import { ExportButton, ReportNav } from '@/components/reports/report-nav';
+import { ExportButtons, ReportNav } from '@/components/reports/report-nav';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -85,8 +85,9 @@ export default function ShiftsReport({
                         from={filters.from}
                         to={filters.to}
                     />
-                    <ExportButton
-                        href={reports.export.shifts.url({ query: filters })}
+                    <ExportButtons
+                        excel={reports.export.shifts.url({ query: filters })}
+                        pdf={reports.pdf.shifts.url({ query: filters })}
                     />
                 </div>
 

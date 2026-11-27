@@ -2,7 +2,7 @@ import { Head, router } from '@inertiajs/react';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { PageHeader } from '@/components/page-header';
 import {
-    ExportButton,
+    ExportButtons,
     ReportNav,
     StatCard,
 } from '@/components/reports/report-nav';
@@ -95,8 +95,9 @@ export default function SalesReport({
                         to={filters.to}
                         extra={{ group: filters.group }}
                     />
-                    <ExportButton
-                        href={reports.export.sales.url({ query: filters })}
+                    <ExportButtons
+                        excel={reports.export.sales.url({ query: filters })}
+                        pdf={reports.pdf.sales.url({ query: filters })}
                     />
                 </div>
 
