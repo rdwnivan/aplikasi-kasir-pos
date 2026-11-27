@@ -133,7 +133,7 @@ Tidak ada pendaftaran mandiri: setiap akun harus punya role, jadi fitur `registr
 - **QRIS kedaluwarsa lewat polling (bug diperbaiki, 2026-11-26).** Ditemukan saat mencoba pesan "Kembalikan uang tunai" (§11.4) di lokal: QR split INV-20261126-0002 tetap "Menunggu pembayaran" lebih dari 3 menit setelah `expiresAt`. Midtrans menjawab `GET /v2/{order}/status` untuk transaksi kedaluwarsa dengan HTTP 200, `status_code` `407` ("Success, transaction is found"), `transaction_status` `expire`; `MidtransClient::send()` menganggap `status_code` selain 2xx sebagai gagal, jadi `QrisPayments::refresh()` tidak pernah membatalkan transaksi itu (yang tetap membatalkan: tombol "Batalkan QRIS", penutupan shift oleh owner, dan notifikasi webhook `expire` yang tidak memanggil `status()`). Perbaikan: `status()` menerima `407` sebagai jawaban bila body membawa `transaction_status`; error lain (mis. `404` "Transaction doesn't exist.") tetap dianggap gagal. Fake Midtrans di `QrisPaymentTest` kini memakai kode status asli Midtrans (sebelumnya semua status non-lunas dijawab `201`, sehingga bug ini tersembunyi), dengan tes regresi "cancels an expired QR by polling, although Midtrans answers 407" (merah sebelum perbaikan) dan tes bahwa `404` tetap "tidak ada kabar". Seluruh suite: SQLite 365 lulus + 5 dilewati, PostgreSQL 370 lulus. Dengan sandbox sungguhan: `MidtransClient::status()` untuk order kedaluwarsa kini mengembalikan `expire`, order yang tidak ada tetap error. **Browser lokal** (`php -S`, DB `kasir_pos_test`): QR split baru INV-20261126-0002 (Gula Pasir Rp 18.500, tunai Rp 10.000 + QRIS Rp 8.500, kedaluwarsa 21:50:10); pukul 21:51 dialog sendiri berganti ke "QRIS kedaluwarsa atau dibatalkan. Keranjang masih ada; pilih cara bayar lain atau buat QRIS baru." + "Kembalikan uang tunai Rp 10.000 ke pelanggan.", sale `cancelled`, header shift tetap "0 transaksi · kas Rp 200.000". Dua percobaan pertama ditolak 409 karena nomor INV hari yang sama sudah dipakai di sandbox (bukan bug).
 - **Deploy log audit (§15) + perbaikan QRIS kedaluwarsa** (2026-11-26, commit `0f93900`). `tests` hijau → job migrasi `demo-db` menjalankan `2026_11_26_000002_create_account_events_table` di Neon → job deploy (`dpl_D8NHj9ETVoptp7Vr84m6nroHgSkv`, READY, commit yang sama) + health check lulus. `/up` 200; `/pengguna/riwayat` tanpa login dialihkan (302). Tanpa error runtime Vercel 30 menit setelah deploy. Belum dicek di live: halaman Riwayat akun dengan login owner, dan pembatalan QR kedaluwarsa lewat polling di demo live.
 - **Ekspor PDF laporan (§16), browser lokal** (2026-11-27). Pest: `PdfExportTest` (32 tes); 30 di antaranya ditulis lebih dulu dan merah sebelum implementasi, 2 (pemecahan tabel, batas per sel) ditambahkan setelah pengukuran mengubah rancangannya; `ExportTest` (Excel) tidak diubah dan tetap hijau setelah tabel dipindah ke `ReportTables`. Seluruh suite: SQLite 397 lulus + 5 dilewati, PostgreSQL 402 lulus, Pint dan PHPStan bersih, `DemoSalesSeeder` tetap jalan. **Browser** (`php -S` port 8001, DB `kasir_pos_test` hasil `migrate:fresh --seed` dengan data 30 hari, akun owner demo): keempat halaman laporan menampilkan "Ekspor Excel" + "Ekspor PDF" dengan filter halaman (mis. `/laporan/pdf/kasir?from=2026-11-21&to=2026-11-27`). Unduhan PDF: `200`, `application/pdf`, diawali `%PDF-`, nama file `laporan-penjualan-2026-10-29_2026-11-27.pdf` dst., juga penjualan bulanan. Isi PDF dari data demo dibaca ulang: penjualan 30 hari (2 halaman lanskap, judul kolom di halaman 2, Total Rp 52.416.385 / laba kotor Rp 5.489.414 / margin 11,7%, sama dengan kartu di halaman laporan), produk terlaris, nilai persediaan (Rp 3.855.237, per produk + per kategori, potret), rekap kasir & shift (3 halaman). Dua masalah tata letak ditemukan dan diperbaiki saat itu: judul kolom angka saling menimpa (judul kini boleh dibungkus) dan produk terlaris 12 kolom terlalu sempit di potret (kini lanskap). Penjualan harian 1 Jan 2024 – 27 Nov 2026 → "Ekspor PDF" kembali ke halaman yang sama dengan toast "Terlalu banyak baris untuk PDF (1062, maksimal 590). Persempit periode atau pakai Ekspor Excel." Tanpa error konsol dari aplikasi. **Deploy** (commit `cd57470`): `tests` hijau → migrasi `demo-db` (tidak ada migrasi baru) → deploy `dpl_2qKcetfNMhuL6vNe6NFwA77tsKw2` READY + health check lulus, jadi image Docker dengan dompdf ter-build. `/up` 200; `/laporan/pdf/penjualan` tanpa login dialihkan (302). Tanpa error runtime Vercel 30 menit setelah deploy. Belum dicek: mengunduh PDF di demo live dan waktu render di Vercel (butuh login owner, ditunda di bawah).
-- **Pembaruan keamanan Symfony** (2026-11-27). `composer audit` melaporkan 7 advisory: `symfony/http-kernel` (CVE-2026-133743, `asset()`/`absolute_url()` lewat header forwarded), `symfony/routing` (CVE-2026-133746 dan -133754, `UrlGenerator` ke host lain), `symfony/mailer` (CVE-2026-133751 dan -133755, `require_tls` / STARTTLS), `symfony/serializer` (CVE-2026-133761 dan -133752; dipakai `web-auth/webauthn-lib` untuk passkey). Semua diperbaiki di 8.1.12. `composer update symfony/http-kernel symfony/mailer symfony/routing symfony/serializer -w` (Laravel tetap terkunci) hanya menaikkan versi patch: keempat paket itu + `symfony/http-foundation`, `symfony/mime`, `symfony/var-dumper` ke 8.1.12, dan `egulias/email-validator` 4.0.4 → 4.0.5; hanya `composer.lock` yang berubah. `composer audit` kini bersih. Seluruh suite: SQLite 397 lulus + 5 dilewati, PostgreSQL 402 lulus, Pint dan PHPStan bersih, `DemoSalesSeeder` tetap jalan. **Browser lokal** (`php -S` port 8001, DB `kasir_pos_test` hasil `migrate:fresh --seed`): login owner → dashboard, laporan penjualan tampil; `/kasir`, `/kasir/transaksi`, `/produk`, `/stok-opname`, `/stok-opname/baru`, `/pengguna`, `/pengguna/riwayat`, `/laporan/kasir` 200; ekspor Excel dan PDF terunduh; URL yang tidak ada 404.
+- **Pembaruan keamanan Symfony** (2026-11-27). `composer audit` melaporkan 7 advisory: `symfony/http-kernel` (CVE-2026-133743, `asset()`/`absolute_url()` lewat header forwarded), `symfony/routing` (CVE-2026-133746 dan -133754, `UrlGenerator` ke host lain), `symfony/mailer` (CVE-2026-133751 dan -133755, `require_tls` / STARTTLS), `symfony/serializer` (CVE-2026-133761 dan -133752; dipakai `web-auth/webauthn-lib` untuk passkey). Semua diperbaiki di 8.1.12. `composer update symfony/http-kernel symfony/mailer symfony/routing symfony/serializer -w` (Laravel tetap terkunci) hanya menaikkan versi patch: keempat paket itu + `symfony/http-foundation`, `symfony/mime`, `symfony/var-dumper` ke 8.1.12, dan `egulias/email-validator` 4.0.4 → 4.0.5; hanya `composer.lock` yang berubah. `composer audit` kini bersih. Seluruh suite: SQLite 397 lulus + 5 dilewati, PostgreSQL 402 lulus, Pint dan PHPStan bersih, `DemoSalesSeeder` tetap jalan. **Browser lokal** (`php -S` port 8001, DB `kasir_pos_test` hasil `migrate:fresh --seed`): login owner → dashboard, laporan penjualan tampil; `/kasir`, `/kasir/transaksi`, `/produk`, `/stok-opname`, `/stok-opname/baru`, `/pengguna`, `/pengguna/riwayat`, `/laporan/kasir` 200; ekspor Excel dan PDF terunduh; URL yang tidak ada 404. **Deploy** (commit `039e912`, tanpa migrasi): `tests` dan `demo-db` lulus → deployment `dpl_4LV5g41ECLAp6sXrf9aGn7GY9Kvj` READY untuk commit itu. Dari luar: `/up` 200, `/login` 200, `/laporan/pdf/penjualan` mengalihkan tamu ke login (302). Vercel tidak mencatat error runtime sejak deploy.
 
 ### Belum terverifikasi
 
@@ -632,3 +632,121 @@ Tujuan: owner bisa mengunduh keempat laporan (penjualan & laba kotor, produk ter
 - **Ukuran diukur** (lokal, PHP 8.5, `memory_limit` produksi 256M dari `docker/php.ini`). Satu tabel panjang: 1.000 baris × 11 kolom butuh 14,8 detik dan 508 MB, sedangkan 2.000 baris kehabisan 1 GB. `table-layout: fixed` saja tidak cukup (500 × 13: 9,5 detik, 404 MB). Memecah tabel menjadi potongan 50 baris (`ReportPdf::ROWS_PER_TABLE`, lebar kolom tetap dari lebar Excel supaya potongan tetap sejajar): 500 × 13 = 3,4 detik / 182 MB, 590 × 11 = 3,1 detik / 170 MB, 928 × 7 = 3,5 detik / 170 MB. Biaya mengikuti jumlah sel, jadi batasnya 6.500 sel per tabel, bukan jumlah baris tetap.
 - Dependency baru: `dompdf/dompdf` ^3.1.6 (beserta `dompdf/php-font-lib`, `dompdf/php-svg-lib`, `masterminds/html5`, `sabberworm/php-css-parser`); paket lain tidak berubah. `composer audit` melaporkan 7 advisory di paket Symfony yang sudah terpasang sebelumnya (`http-kernel`, `mailer`, `routing`, `serializer`), bukan dari dompdf; diperbarui 2026-11-27 (lihat §8).
 - Tes: `tests/Feature/Reports/PdfExportTest.php`; `ExportTest` (Excel) tidak diubah dan tetap hijau.
+
+## 17. v2: Kasbon / piutang pelanggan (2026-11-27)
+
+Tujuan: kasir bisa mencatat penjualan yang **dibayar belakangan** oleh pelanggan langganan (warung tetangga, pegawai, pelanggan tetap), lalu pelanggan melunasinya sebagian atau penuh di kasir mana pun. Owner bisa melihat siapa berutang berapa dan sejak kapan.
+
+### 17.1 Kondisi sekarang (hasil pemeriksaan)
+
+- **Belum ada pelanggan** sama sekali: tidak ada tabel, model, atau kolom `customer_id`. Satu-satunya nama pelanggan adalah `sales.held_label` (label bebas keranjang ditahan).
+- `PaymentMethod`: `cash`, `qris`, `split` (§11); `sales.payment_method` `varchar(10)`. `SaleStatus`: `held`, `pending_payment`, `completed`, `cancelled`. Hanya `CompleteSale` (tunai) dan `QrisPayments::settle()` (QRIS/campuran) yang membuat sale `completed` dan mengeluarkan stok lewat `BooksSaleStock` → `StockLedger::issue()`.
+- **Kas laci**: `Shift::expectedCash()` = modal + `cashSalesTotal()` (Σ `Sql::cashPart()` sale `completed` di shift itu) − `refundsTotal()` (Σ `sale_returns.total` yang diproses di shift itu). `ShiftRecap` dan `CloseShift`/`CloseShiftForUser` memakai rumus yang sama; `Sql::cashPart()`/`qrisPart()` adalah satu-satunya ekspresi pembagian cara bayar, dipakai juga oleh `SalesSummary`.
+- **Retur** (`ProcessSaleReturn`, §9.2): PIN owner, shift terbuka wajib, nilai retur = bagian yang dibayar pelanggan (`Apportion`), dan **seluruh** `sale_returns.total` dianggap uang tunai keluar dari laci. `SalesSummary` memakai `sale_returns.total` sebagai pengurang omzet.
+- **Laba kotor** (§9.1) diakui saat sale `completed` (`completed_at`), tidak bergantung cara bayar.
+- **Laporan & ekspor**: `app/Reports/*` → `App\Exports\ReportTables` → `ReportDocument` → Excel (`Spreadsheet`) dan PDF (`ReportPdf`, batas 6.500 sel per tabel). Ringkasan penjualan punya kolom Tunai dan QRIS (Tunai + QRIS = Penjualan); rekap shift punya Tunai, QRIS, Retur, Kas seharusnya.
+- **Nomor dokumen**: `DocumentNumber` punya `GR`, `SO`, `PO`, `INV`, `RET`.
+- **Pola yang ditiru**: `StockLedger` (buku besar immutable + cache di baris induk yang dikunci `FOR UPDATE`, `stock:rebuild` untuk membuktikan cache = replay), urutan kunci **shift → sale → produk** (§13.2).
+
+### 17.2 Keputusan (disetujui 2026-11-27)
+
+**Data pelanggan**
+
+- Tabel `customers`: `name` (wajib, maks. 100), `phone` (nullable, unik bila diisi, dinormalisasi ke angka saja; dipakai untuk mencari), `address` (nullable), `note` (nullable), `credit_limit` (integer Rupiah, ≥ 0), `balance` (integer Rupiah, **cache** sisa utang, hanya diubah lewat `CustomerLedger`), `deactivated_at` (nullable), `created_by` (FK `users`). Pelanggan tidak pernah dihapus (dirujuk oleh sale dan ledger), hanya dinonaktifkan.
+- **Siapa yang membuat**: kasir **boleh** menambah pelanggan langsung dari dialog bayar (nama + HP saja), supaya kasbon pertama tidak menunggu owner. Pelanggan baru mendapat **batas kredit bawaan global** `pos.credit.default_limit` (env `POS_CREDIT_DEFAULT_LIMIT`, default Rp 500.000; boleh 0 bila toko ingin semua kasbon disetujui owner dulu). Hanya owner yang mengubah data, batas kredit, dan status pelanggan.
+- **Batas kredit per pelanggan** (bawaan dari global saat dibuat). Aturannya: `balance + kasbon baru ≤ credit_limit`; batas 0 = tidak boleh kasbon. Melebihi batas **ditolak** dengan pesan sisa batas ("Batas kasbon Bu Sari Rp 500.000, sisa Rp 120.000."); tidak ada override PIN, owner menaikkan batas di halaman pelanggan bila setuju. Pelanggan nonaktif tidak bisa diberi kasbon, tetapi tetap bisa melunasi.
+
+**Cara bayar**
+
+- `PaymentMethod::Credit` (`credit`, label **"Kasbon"**), dengan **uang muka tunai opsional**: pelanggan boleh membayar sebagian tunai sekarang dan sisanya jadi utang (mis. belanja Rp 87.500, DP Rp 20.000, kasbon Rp 67.500). Kolom baru `sales.credit_amount` = bagian yang menjadi utang (≥ Rp 1, ≤ total); bagian tunai = `total − credit_amount`, diterima pas tanpa kembalian (sama seperti tunai di §11.1). `sales.customer_id` (FK nullable) diisi untuk kasbon.
+- **Tidak digabung dengan QRIS** dalam satu transaksi (tidak ada "QRIS + kasbon" atau "tunai + QRIS + kasbon"). Kasbon selesai seketika di `CompleteSale` (tanpa menunggu Midtrans), sedangkan campuran §11 menunggu settlement; menggabungkan keduanya berarti utang tercatat untuk sale yang mungkin batal. Pelanggan yang ingin membayar sebagian lewat QRIS bisa kasbon penuh lalu langsung melunasi sebagian (lihat Pelunasan).
+- `Sql::cashPart()` mendapat `WHEN 'credit' THEN sales.total - sales.credit_amount` dan ekspresi baru `Sql::creditPart()`, sehingga Tunai + QRIS + Kasbon = Penjualan di semua laporan, dan uang muka masuk kas laci lewat rumus yang sudah ada.
+- Transaksi kasbon tetap satu `Sale` bernomor `INV-…`, `status = completed`, `paid_amount` = uang muka, `change_amount = 0`. Keranjang ditahan bisa dilanjutkan sebagai kasbon (pelanggan dipilih saat bayar, bukan saat tahan).
+
+**Stok, HPP, laba kotor**
+
+- Stok keluar **saat transaksi**, di `CompleteSale` seperti penjualan tunai (`StockLedger::issue()` dengan HPP rata-rata saat itu). Tidak ada perubahan pada `StockLedger` maupun `stock:rebuild`.
+- Laba kotor **diakui saat jual** (`completed_at`), sama dengan §9.1: penjualan terjadi saat barang diserahkan, pelunasan hanya penerimaan kas atas piutang. Jadi `SalesSummary`, `TopProducts`, dan dashboard tidak mengubah rumus; laporan penjualan hanya mendapat kolom **Kasbon**.
+- **Penghapusan utang** (lihat Role) tidak mengurangi penjualan maupun laba kotor; ia beban piutang tak tertagih yang terlihat di kartu dan laporan piutang, bukan di laporan penjualan.
+
+**Ledger piutang (immutable, seperti `StockLedger`)**
+
+- Tabel `customer_ledger_entries`: `customer_id`, `sale_id` (FK, **wajib**: setiap baris menempel ke satu transaksi kasbon), `type` (`App\Enums\LedgerEntryType`: `sale`, `payment`, `sale_return`, `write_off`), `amount` (signed: + menambah utang, − mengurangi), `balance_after` (saldo pelanggan setelah baris ini), `reference` (polymorphic: `Sale`, `CustomerPayment`, `SaleReturn`, atau `CustomerWriteOff`), `user_id`, `note`, `created_at` (tanpa `updated_at`). Baris tidak pernah diubah atau dihapus; koreksi = baris baru.
+- **Satu-satunya pengubah utang**: service `App\Services\Receivables\CustomerLedger` (`charge()`, `settle()`, `reverse()` untuk retur, `writeOff()`), yang mengunci baris `customers` dengan `SELECT … FOR UPDATE`, menulis baris ledger, dan memperbarui `customers.balance` di transaksi yang sama. Sisa utang per transaksi = Σ `amount` per `sale_id`, jadi umur piutang dihitung dari ledger tanpa kolom cache tambahan.
+- `php artisan receivables:rebuild [--fix]` menjumlah ulang ledger per pelanggan dan membandingkannya dengan `customers.balance` (dan memeriksa tidak ada sisa per transaksi yang negatif), seperti `stock:rebuild`.
+- **Urutan kunci**: shift → pelanggan → sale → produk. `CompleteSale` (kasbon) mengunci pelanggan setelah shift dan sebelum produk; pelunasan mengunci shift lalu pelanggan.
+
+**Pelunasan**
+
+- Dicatat di tabel `customer_payments`: `number` (`PAY-YYYYMMDD-0001`, konstanta baru `DocumentNumber::CUSTOMER_PAYMENT`), `customer_id`, `shift_id` (shift **pengguna yang menerima**, wajib terbuka), `user_id`, `amount`, `method` (`cash`), `note`, `created_at`. Kasir mana pun (atau owner yang membuka shift) bisa menerima pelunasan pelanggan mana pun, dari shift-nya sendiri.
+- **Tunai masuk kas shift penerima**: `Shift::expectedCash()` = modal + penjualan tunai (termasuk uang muka kasbon) + **pelunasan tunai** − refund tunai. Halaman Tutup shift (kasir dan owner §13) menampilkan baris "Pelunasan kasbon (N)".
+- **Sebagian atau penuh**: 1 ≤ jumlah ≤ `balance`. Kelebihan bayar ditolak (tidak ada saldo deposit); kembalian diberikan kasir di luar sistem seperti biasa, yang dicatat hanya jumlah yang dilunasi.
+- **Alokasi FIFO**: pembayaran menutup transaksi kasbon **tertua lebih dulu** (urut `completed_at`, lalu `id`), satu baris ledger `payment` per transaksi yang tersentuh. Tidak ada pilihan transaksi manual: FIFO cocok dengan cara warung menagih ("bayar yang lama dulu") dan membuat umur piutang jujur. Struk pelunasan menampilkan alokasinya.
+- **QRIS untuk pelunasan: tidak di versi ini.** Mesin status QRIS (`QrisPayments`, webhook, polling, pembatalan saat tutup shift) melekat pada `Sale`; memakainya untuk pelunasan berarti mesin status kedua atau generalisasi `QrisPayments` ke dokumen lain, dengan risiko yang sama besarnya dengan fitur ini sendiri. Kolom `customer_payments.method` disiapkan supaya QRIS bisa ditambah kemudian tanpa migrasi ulang (lihat 17.4).
+
+**Retur atas transaksi kasbon (§9.2)**
+
+- Nilai retur dihitung persis seperti sekarang (`Apportion`, retur unit terakhir mengembalikan sisa bagian). Bedanya: nilai itu **lebih dulu mengurangi sisa utang transaksi itu**, dan hanya kelebihannya (bila transaksi sudah dibayar sebagian lewat uang muka/pelunasan) dikembalikan tunai dari laci.
+- Kolom baru `sale_returns.credit_amount` (default 0) = bagian yang mengurangi utang. `sale_returns.total` tetap = nilai retur penuh (pengurang omzet dan PPN di `SalesSummary`, tidak berubah). Uang tunai keluar = `total − credit_amount`, jadi `Shift::refundsTotal()` dan `ShiftRecap` menjumlah `total − credit_amount`.
+- PIN owner dan shift terbuka tetap wajib (aturan §9.2 tidak dilonggarkan, dan `sale_returns.shift_id` tetap terisi).
+- Contoh: kasbon Rp 67.500 + DP Rp 20.000, lalu pelanggan melunasi Rp 50.000 (sisa utang transaksi Rp 17.500), lalu meretur barang senilai Rp 30.000 → utang berkurang Rp 17.500 (lunas), tunai Rp 12.500 dikembalikan dari laci.
+
+**Struk**
+
+- Struk penjualan kasbon: nama pelanggan, baris "Uang muka tunai Rp …" (bila ada) dan **"Kasbon Rp …"**, lalu **"Sisa utang {nama}: Rp …"** = `balance_after` baris ledger transaksi itu (bukan saldo saat dicetak ulang, supaya cetak ulang tetap sama), plus baris tanda tangan pelanggan.
+- **Bukti pelunasan** (view Blade baru, ukuran 58/80mm yang sama): nomor `PAY-…`, pelanggan, jumlah, alokasi per `INV-…` (dibayar / sisa), "Sisa utang: Rp …", kasir dan waktu. Dicetak dari dialog sukses pelunasan dan dari kartu piutang.
+
+**Role & PIN**
+
+| Aksi                                           | Kasir                      | Owner | Gudang |
+| ---------------------------------------------- | -------------------------- | ----- | ------ |
+| Tambah pelanggan (nama + HP, batas bawaan)     | ✅ (dari dialog bayar)     | ✅    | —      |
+| Ubah data, batas kredit, nonaktifkan pelanggan | —                          | ✅    | —      |
+| Memberi kasbon (dalam batas)                   | ✅ tanpa PIN               | ✅    | —      |
+| Menerima pelunasan                             | ✅ (shift sendiri terbuka) | ✅    | —      |
+| Lihat daftar pelanggan + saldo (untuk mencari) | ✅                         | ✅    | —      |
+| Kartu piutang (riwayat per pelanggan)          | ✅ baca                    | ✅    | —      |
+| Hapus (write-off) sisa utang                   | —                          | ✅    | —      |
+| Laporan piutang + ekspor                       | —                          | ✅    | —      |
+
+- **Kasbon tidak butuh PIN owner**: batas kredit per pelanggan adalah kontrolnya, dan PIN di setiap kasbon berarti owner harus selalu ada di toko. Retur atas kasbon tetap butuh PIN seperti retur lain.
+- **Write-off** (owner saja, alasan wajib): menghapus sisa utang satu transaksi atau seluruh sisa pelanggan (FIFO), tercatat sebagai baris ledger `write_off` + dokumen `customer_write_offs` (siapa, kapan, alasan). Tidak ada "tambah utang manual": utang hanya lahir dari transaksi kasbon.
+
+**Migrasi (expand saja, §9.6)**
+
+- Tabel baru `customers`, `customer_payments`, `customer_write_offs`, `customer_ledger_entries`.
+- Kolom baru nullable/ber-default: `sales.customer_id`, `sales.credit_amount`, `sale_returns.credit_amount` (default 0). Tanpa backfill. Kode lama yang masih melayani selama migrasi tidak pernah menulis `credit`, dan untuk retur lama `credit_amount = 0` berarti rumus kas baru = rumus lama.
+
+### 17.3 Tampilan
+
+- **Dialog bayar (F9)**: pilihan keempat **"Kasbon"**. Isi: pencarian pelanggan (nama/HP, hanya yang aktif) dengan baris "Utang Rp … · sisa batas Rp …", tombol "+ Pelanggan baru" (nama, HP), input "Uang muka tunai" (boleh 0), baris "Jadi kasbon Rp …". Tombol "Simpan kasbon" nonaktif bila belum ada pelanggan, uang muka ≥ total, atau melebihi sisa batas (server tetap memeriksa ulang di dalam transaksi).
+- **Dialog "Transaksi berhasil"**: "Kasbon Rp … atas nama {pelanggan} · sisa utang Rp …" + tombol Cetak struk.
+- **Pelunasan di layar kasir**: tombol header "Pelunasan" (dan route `GET /kasir/pelunasan`): cari pelanggan berutang → daftar transaksi belum lunas (tertua dulu, umur hari) → jumlah (tombol "Lunasi semua") → "Terima Rp …" → dialog sukses + cetak bukti. Header shift menampilkan kas termasuk pelunasan.
+- **Riwayat transaksi**: filter cara bayar "Kasbon", kolom pelanggan; detail menampilkan uang muka, kasbon, dan sisa utang transaksi itu sekarang; dialog retur menampilkan "Mengurangi utang Rp … / Dikembalikan tunai Rp …" sebelum PIN.
+- **Menu "Pelanggan"** (owner + kasir; gudang tidak): daftar (nama, HP, utang, batas, transaksi tertua belum lunas, status), filter "berutang"/"lewat 30 hari"/nonaktif. **Kartu piutang** `/pelanggan/{customer}`: baris ledger (tanggal, dokumen, keterangan, +/−, saldo), transaksi belum lunas, tombol Ubah/Nonaktifkan/Hapus utang (owner).
+- **Laporan → Piutang** (`/laporan/piutang`, owner): per pelanggan per hari ini (WIB): utang total, umur **0–30 / 31–60 / 61–90 / > 90 hari** (dari `completed_at` transaksi, per sisa transaksi), transaksi tertua, pelunasan terakhir; total di bawah. **Ekspor Excel + PDF** lewat `ReportTables::receivables()`, route `reports.export.receivables` / `reports.pdf.receivables` (`/laporan/excel/piutang`, `/laporan/pdf/piutang`), potret.
+- **Laporan penjualan**: kolom **Kasbon** di sebelah Tunai dan QRIS (Excel + PDF ikut, 12 kolom; batas PDF jadi 541 baris). Kolom Tunai sudah termasuk uang muka.
+- **Rekap kasir & shift**: kolom **Kasbon** (diberikan) dan **Pelunasan** (tunai diterima), Kas seharusnya ikut pelunasan dan refund tunai; Excel/PDF ikut.
+- **Dashboard owner**: kartu "Piutang": total utang, jumlah pelanggan berutang, dan bagian yang lewat 30 hari.
+
+### 17.4 Tidak dikerjakan
+
+- Pelunasan lewat QRIS/transfer (alasannya di 17.2; `customer_payments.method` sudah disiapkan), kasbon digabung QRIS dalam satu transaksi.
+- Jatuh tempo per transaksi, bunga/denda, pengingat WhatsApp/SMS, cetak rekening koran pelanggan.
+- Saldo deposit / kelebihan bayar, harga khusus per pelanggan, poin/loyalti, pelanggan di transaksi non-kasbon.
+- Laporan beban piutang tak tertagih per periode (write-off terlihat di kartu piutang dan ledger saja).
+- Multi-cabang: pelanggan berlaku untuk satu toko.
+
+### 17.5 Rencana tes (ditulis lebih dulu)
+
+- **Ledger**: `charge`/`settle`/`reverse`/`writeOff` menulis baris immutable dengan `balance_after` benar dan memperbarui `customers.balance`; sisa per transaksi tidak pernah negatif; `receivables:rebuild` cocok setelah skenario campuran dan melaporkan selisih bila cache dirusak.
+- **Kasbon**: penuh dan dengan uang muka → sale `completed`, `credit_amount` benar, stok keluar sekali dengan HPP rata-rata, saldo pelanggan naik; melebihi batas, batas 0, pelanggan nonaktif, uang muka ≥ total, tanpa pelanggan → ditolak tanpa sale, movement, maupun baris ledger. Dari keranjang ditahan: keranjang terhapus.
+- **Kas & laporan**: `expectedCash` = modal + tunai + uang muka + pelunasan − refund tunai (shift kasir dan penutupan owner §13); `SalesSummary` Tunai + QRIS + Kasbon = Penjualan, laba kotor sama dengan penjualan tunai yang setara; `ShiftRecap` kolom Kasbon/Pelunasan.
+- **Pelunasan**: sebagian dan penuh, FIFO lintas tiga transaksi (baris ledger per transaksi), melebihi saldo/0/tanpa shift terbuka ditolak, tunai masuk shift penerima (bukan shift tempat kasbon dibuat).
+- **Retur**: retur kasbon belum dibayar → utang berkurang, tunai 0; sudah dibayar sebagian → utang dulu, sisanya tunai (contoh di 17.2); retur penuh mengembalikan utang ke 0 tepat; PIN tetap wajib.
+- **Write-off**: owner saja (kasir/gudang 403), alasan wajib, tidak mengubah laba kotor.
+- **Akses**: gudang 403 di semua route pelanggan/pelunasan; kasir 403 di ubah/nonaktif/batas/write-off/laporan piutang; kasir boleh tambah pelanggan dengan batas bawaan (batas yang dikirim kasir diabaikan).
+- **Struk & bukti pelunasan**: "Kasbon", uang muka, sisa utang dari `balance_after` (cetak ulang setelah pelunasan tetap menampilkan angka saat transaksi); bukti pelunasan berisi alokasi.
+- **Laporan piutang + ekspor**: umur 0–30/31–60/61–90/>90 dengan `setTestNow`; Excel dan PDF dari `ReportTables` (isi sama); kolom Kasbon di ekspor penjualan dan rekap shift.
+- **Konkurensi (PostgreSQL, `tests/Concurrency`)**: dua kasbon bersamaan untuk pelanggan yang sama yang masing-masing muat tetapi berdua melebihi batas → hanya satu yang tersimpan; dua pelunasan bersamaan atas sisa utang terakhir → hanya satu berhasil.
+- `DemoSalesSeeder` tetap jalan: 5 pelanggan langganan, ±1 dari 25 transaksi kasbon (sebagian dengan uang muka), pelunasan sebagian dan penuh di hari berikutnya, satu retur atas kasbon, satu pelanggan dengan utang > 30 hari; semuanya lewat Action asli, lalu `stock:rebuild` dan `receivables:rebuild` cocok.
