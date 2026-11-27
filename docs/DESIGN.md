@@ -897,3 +897,125 @@ Fake Midtrans memakai kode status asli (charge `201`, status `pending` `201`, `s
 - Route `pos.payments.qris.store|show|cancel` (`CustomerPaymentQrisController`); setelah membuat atau membatalkan QR, halaman kembali ke `/kasir/pelunasan?pelanggan={id}` supaya pelanggan tetap terpilih. Halaman Pelunasan: tombol "Terima tunai" dan "QRIS", prop `pendingPayment`, `qrisEnabled`, `debtors[].waitingQris`. `qris-dialog.tsx` kini menerima `statusUrl`/`cancelUrl`/`reloadOnly`/`note`/`cancelledNote` lewat props dan dipakai layar kasir maupun halaman Pelunasan (teks layar kasir dipindah ke pemanggilnya, tidak berubah). Bukti pelunasan: "Cara bayar" + "Ref." Midtrans, 404 untuk pembayaran yang belum/tidak diterima; kartu piutang: "QRIS · / Tunai ·" per baris pelunasan dan pemberitahuan QR menunggu (`waitingQris`); halaman Rekap kasir & shift mendapat kolom "Pelunasan QRIS".
 - Data demo: `DemoSalesSeeder::payByQris()` (±sepertiga pelunasan) memasang `Http\Client\Factory` sendiri dengan `preventStrayRequests()` dan stub charge saja, lalu mengembalikan factory dan server key semula.
 - Tes: `tests/Feature/Customers/QrisCustomerPaymentTest.php` (25 tes, semuanya merah sebelum implementasi), `tests/Concurrency/QrisCustomerPaymentRaceTest.php` (+ `tests/Support/concurrent_qris_payment.php`; merah bila `CustomerLedger::lock()` di `StartQrisCustomerPayment` diganti pembacaan biasa, dicek sementara), satu tes baru di `DemoSeederTest` (ditulis setelah perubahan seeder, bukan lebih dulu), dan `ReceivablesReportTest` disesuaikan untuk label kolom baru.
+
+## 19. v2: Batch & tanggal kedaluwarsa (2026-11-27)
+
+Tujuan: toko bisa mencatat **tanggal kedaluwarsa per batch** untuk produk yang membutuhkannya (susu, roti, obat, minuman), melihat barang yang hampir atau sudah kedaluwarsa, dan stok keluar dengan urutan **FEFO** (kedaluwarsa paling awal keluar lebih dulu). Produk tanpa pelacakan berperilaku persis seperti sekarang.
+
+Pilihan diberi kode **P1–P10**; yang dipilih ditulis lebih dulu, alternatif yang ditolak di bawahnya.
+
+### 19.1 Kondisi sekarang (hasil pemeriksaan)
+
+- **`StockLedger`** punya tiga pintu: `receive()` (purchase / sale_return, menghitung ulang rata-rata), `issue()` (keluar dengan HPP rata-rata), `adjustTo()` (opname ke hitungan). Ketiganya lewat `apply()`: kunci baris `products` `FOR UPDATE` → cek stok tidak negatif → tulis cache `stock_on_hand`/`avg_cost` (nilai hasil hitung, bukan `qty - n`) → satu baris `stock_movements`. Tidak ada konsep batch atau tanggal di mana pun.
+- **`stock_movements`**: `product_id`, `type` (`varchar(20)`), `qty` bertanda, `unit_cost`, `stock_after`, `avg_cost_after`, `reference` (morph: GR, Sale, SaleReturn, StockOpname), `user_id`, `note`, `created_at`. `StockMovementType::Adjustment` ("Penyesuaian") ada di enum tetapi **tidak dipakai** kode mana pun.
+- **Pemanggil**: `ReceiveGoods` (GR langsung, dan dari PO lewat `ReceivePurchaseOrder`; satu movement per baris GR, urut `product_id`), `BooksSaleStock` (dipakai `CompleteSale` dan `QrisPayments::settle()`; satu `issue()` per baris sale, `sale_items.unit_cost` diambil dari movement itu), `ProcessSaleReturn` (satu `receive(sale_return)` per baris retur dengan HPP baris asli), `PostStockOpname` (`adjustTo()` per produk; `stock_opname_items` unik per `(stock_opname_id, product_id)`). `CatalogSeeder` (stok awal) dan `DemoSalesSeeder` lewat `ReceiveGoods`/`ReceivePurchaseOrder` asli.
+- **Pemeriksaan stok di luar ledger**: `StartQrisPayment::ensureStock()` membandingkan `stock_on_hand` sebelum membuat QR; katalog layar kasir (`PosController::catalog()`) mengirim `stock` = `stock_on_hand`.
+- **`stock:rebuild`** memutar ulang movement per produk (qty, type, unit_cost) dan membandingkan dengan cache; mengabaikan `stock_after`/`avg_cost_after`.
+- **Tampilan stok**: kartu stok `/produk/{product}/kartu-stok` (`StockCardController`), kartu dashboard "Stok menipis" (`LowStock`) dan "PO belum selesai" untuk owner + gudang, laporan nilai persediaan (`InventoryValuation`: `stock_on_hand × avg_cost`). Laporan (`routes/reports.php`) khusus owner; ekspor lewat `ReportTables` → Excel/PDF.
+- **Urutan kunci** saat ini: shift → pelanggan → sale → produk (urut `product_id`).
+
+### 19.2 Keputusan (disetujui 2026-11-27, semua rekomendasi P1–P10)
+
+**P1. Model data: `stock_movements.stock_batch_id`, satu movement per batch** (rekomendasi)
+
+- Tabel baru `stock_batches`: `product_id` (`restrictOnDelete`), `code` (`varchar(50)`, nullable, kode batch/lot dari kemasan), `expires_on` (`date`, nullable = batch **tanpa tanggal**), `qty_on_hand` (`bigint`, **cache** sisa dalam satuan dasar), timestamps; indeks `(product_id, expires_on)`.
+- Kolom baru nullable `stock_movements.stock_batch_id` (FK, `restrictOnDelete`, berindeks). Untuk produk berflag **setiap** movement menyebut batch-nya; satu baris penjualan yang mengambil dari dua batch menjadi **dua movement** (`type = sale`, referensi sale yang sama, HPP rata-rata yang sama). Produk tanpa flag: `stock_batch_id = null`, persis seperti sekarang.
+- `StockLedger` tetap **satu-satunya pengubah stok**: ia memilih batch (FEFO), menulis movement, dan memperbarui `stock_batches.qty_on_hand` + cache produk di transaksi yang sama. Tidak ada kode lain yang menulis `qty_on_hand`.
+- **Sisa per batch disimpan sebagai cache** (seperti `products.stock_on_hand`), bukan diturunkan dari SUM movement setiap kali: FEFO, kartu dashboard, dan laporan butuh "batch dengan sisa > 0 urut tanggal" yang cepat. Cache ini dibuktikan oleh `stock:rebuild` (19.2 P8).
+- Alternatif ditolak: (a) tabel alokasi terpisah `stock_movement_batches` di bawah satu movement per baris dokumen. Membuat koreksi antar-batch tanpa selisih produk (opname yang memindahkan stok tanpa tanggal ke batch bertanggal) butuh movement `qty = 0` atau baris alokasi tanpa movement; dengan P1, koreksi itu cukup dua movement biasa (−x batch lama, +x batch baru). (b) Sisa batch diturunkan dari SUM movement: tidak ada yang bisa dicache untuk dashboard, dan pembacaan FEFO menjadi agregat di setiap penjualan.
+- Konsekuensi kecil: GR atau retur yang dipecah ke dua batch menghasilkan dua movement `purchase`/`sale_return`, jadi rata-rata dihitung ulang dua kali dengan harga yang sama. Hasilnya bisa berbeda di digit desimal ke-4 dibanding satu baris; replay memutar baris yang sama, jadi `stock:rebuild` tetap identik.
+
+**P2. Flag per produk** (rekomendasi: flag + batch "tanpa tanggal" untuk stok lama)
+
+- Kolom baru `products.tracks_expiry` (boolean, default `false`), diubah di form produk (owner + gudang) dengan keterangan "Lacak tanggal kedaluwarsa".
+- **Menyalakan** dengan stok S > 0: di transaksi yang sama, `StockLedger::startTracking()` membuat satu batch **tanpa tanggal** dan menulis pasangan movement `adjustment` ("Penyesuaian", note "Mulai lacak kedaluwarsa"): −S tanpa batch, +S ke batch tanpa tanggal. Stok dan HPP tidak berubah (keduanya pada rata-rata sekarang; `adjustment` tidak menghitung ulang rata-rata). Kartu stok memperlihatkannya, dan stok lama bisa diberi tanggal lewat opname (P6).
+- **Mematikan**: pasangan kebalikannya (semua sisa batch → tanpa batch), batch tetap ada sebagai riwayat dengan sisa 0. Dengan begitu salah centang bisa dibatalkan tanpa opname.
+- Alternatif ditolak: menolak flag selama stok > 0 (memaksa opname ke 0 dulu, tidak realistis di toko yang buka), atau membagi stok lama ke batch "dianggap kedaluwarsa hari X" (tebakan yang menyesatkan kartu dashboard).
+
+**P3. HPP tetap moving average per produk** (rekomendasi)
+
+- §4 tidak berubah: batch tidak punya HPP sendiri. FEFO hanya mengatur **batch mana yang keluar secara fisik**; nilainya selalu `avg_cost` produk saat itu.
+- Dampak: laba kotor (§9.1) tidak berubah sama sekali (`sale_items.unit_cost` tetap rata-rata). Nilai persediaan tetap `stock_on_hand × avg_cost`, termasuk barang yang sudah kedaluwarsa tetapi belum dibuang; laporan kedaluwarsa (19.3) menampilkan nilai itu terpisah supaya owner melihat berapa yang akan jadi kerugian. Barang yang dibuang (P6) keluar dengan HPP rata-rata, seperti selisih opname sekarang, dan tidak masuk laba kotor.
+- Alternatif ditolak: HPP per batch (identifikasi khusus / FIFO harga). Mengubah §4, `reweigh`, `stock:rebuild`, retur, dan semua laporan; untuk toko kecil selisihnya kecil karena harga beli antar batch jarang berbeda jauh.
+
+**P4. Barang masuk** (rekomendasi: tanggal wajib, satu baris GR boleh dipecah)
+
+- GR langsung dan penerimaan dari PO (§10): untuk produk berflag, setiap baris **wajib** punya minimal satu rincian `(tanggal kedaluwarsa, kode batch opsional, qty dalam satuan baris)`; jumlah qty rincian = qty baris. Satu baris "2 dus" boleh dipecah jadi 1 dus exp 10 Des + 1 dus exp 24 Des. Produk tanpa flag tidak punya rincian (form sama seperti sekarang).
+- Batch **digabung** bila produk, tanggal, dan kode sama (di bawah kunci produk), jadi dua GR dengan tanggal yang sama menambah batch yang sama; movement tetap menunjukkan GR asalnya. Tanggal yang sudah lewat ditolak saat penerimaan ("Tanggal kedaluwarsa sudah lewat").
+- Tidak ada tabel rincian GR: rincian hanya input untuk membuat movement, dan detail GR menampilkan batch per produk dari movement-nya (satu sumber).
+- `ReceiveGoods::handle()` mendapat kunci opsional `batches` per baris; pemanggil lama untuk produk tanpa flag tidak berubah. `CatalogSeeder` mengisi tanggal untuk produk berflag.
+
+**P5. Barang keluar: FEFO, batch kedaluwarsa tidak boleh dijual** (rekomendasi: ditolak)
+
+- `StockLedger::issue()` untuk produk berflag mengambil batch dengan sisa > 0 dan **belum kedaluwarsa** (`expires_on ≥ hari ini` WIB; barang masih boleh dijual pada tanggal yang tertera), urut: **batch tanpa tanggal dulu** (stok lama yang sudah ada sebelum pelacakan), lalu `expires_on`, lalu `id`. Satu baris penjualan bisa menjadi beberapa movement; `BooksSaleStock` menjumlah HPP-nya.
+- Bila stok yang belum kedaluwarsa tidak cukup, penjualan **ditolak** di `CompleteSale` dengan pesan "Stok Susu UHT yang belum kedaluwarsa tinggal 3 pcs (5 pcs sudah kedaluwarsa)." — pengecualian turunan `InsufficientStockException`, jadi penanganan yang ada tetap berlaku. `StartQrisPayment::ensureStock()` memakai stok jual yang sama sebelum membuat QR, dan katalog layar kasir mengirim stok jual (`stock` = sisa batch belum kedaluwarsa) untuk produk berflag.
+- **QRIS** (§9.3): stok keluar saat settlement seperti sekarang; acuan "hari ini" untuk kedaluwarsa = tanggal QR dibuat, supaya QR yang dibuat 23.55 dan dibayar 00.05 tidak gagal karena batch-nya lewat tengah malam. Kekurangan stok tetap jalur `STOCK_SHORTAGE` yang sudah ada.
+- Alasan menolak: UU Perlindungan Konsumen melarang memperdagangkan barang kedaluwarsa, dan barang yang dipegang kasir tetapi tercatat kedaluwarsa berarti barangnya memang kedaluwarsa atau datanya salah (dibetulkan lewat opname). Alternatif: (b) peringatan lalu tetap dijual dari batch kedaluwarsa setelah yang baik habis; (c) dijual tanpa peringatan. Catatan: FEFO murni tanpa aturan ini justru menjual batch kedaluwarsa **lebih dulu**, jadi (b) dan (c) tetap butuh urutan khusus.
+
+**P6. Retur, opname, dan barang dibuang**
+
+- **Retur (§9.2)**: barang kembali ke batch yang diambil penjualan itu. Sisa yang bisa dikembalikan per batch = yang diambil sale itu untuk produk itu − yang sudah diretur ke batch itu, **dihitung dari movement** (tanpa tabel baru). Bila sale mengambil dari beberapa batch, retur mengisi **batch dengan kedaluwarsa paling awal dulu** (rekomendasi, P6a): kasir tidak tahu unit mana yang kembali, dan menganggapnya yang paling cepat kedaluwarsa adalah sisi aman (diperingatkan lebih awal, terjual lebih dulu). Alternatif: kasir memilih tanggal dari kemasan di dialog retur (lebih tepat, tetapi menambah langkah di dialog yang sudah memakai PIN). Batch asal yang sudah kedaluwarsa tetap diisi; barangnya muncul di daftar kedaluwarsa untuk dibuang.
+- **Opname (P6b, rekomendasi: per batch untuk produk berflag)**: baris opname produk berflag berisi hitungan per batch (sisa sistem per batch tampil saat draf) dan boleh menambah batch yang ditemukan (tanggal + kode + qty). Disimpan di tabel baru `stock_opname_item_batches` (`stock_opname_item_id`, `stock_batch_id` nullable untuk batch baru, `expires_on`, `code`, `counted_qty`, lalu `system_qty`/`difference` saat posting); `stock_opname_items.counted_qty` = jumlahnya, jadi unik `(stock_opname_id, product_id)` tetap. Posting: satu movement `opname` per batch yang berselisih, pada HPP rata-rata. Inilah cara memberi tanggal pada stok "tanpa tanggal" (hitung batch tanpa tanggal 0, tambah batch bertanggal). Alternatif ditolak: opname per produk saja, karena selisihnya harus ditebak ke batch mana.
+- **Barang dibuang (P6c, rekomendasi: dokumen + movement baru `disposal`)**: Action `DisposeStock` (owner + gudang) dengan dokumen `stock_disposals` (nomor `DSP-YYYYMMDD-0001`, konstanta baru di `DocumentNumber`, alasan wajib) dan barisnya `stock_disposal_items` (batch, produk, qty, HPP, nilai); movement `type = disposal` ("Dibuang") per batch, keluar pada HPP rata-rata. Tombol "Buang yang kedaluwarsa" mengisi semua batch kedaluwarsa bersisa, dan qty boleh dikurangi (sebagian sudah dibuang tanpa dicatat → sisanya lewat opname). Alternatif ditolak: membuang lewat opname ke 0, karena kerugian kedaluwarsa jadi tercampur dengan barang hilang dan tidak bisa dilaporkan. Cakupan versi ini: batch produk berflag saja; barang rusak produk tanpa flag tetap lewat opname.
+
+**P7. Konkurensi** (rekomendasi: batch dilindungi kunci produk, tanpa level kunci baru)
+
+- Urutan kunci tetap **shift → pelanggan → sale → produk** (urut `product_id`). Baris `stock_batches` hanya ditulis `StockLedger` **setelah** memegang kunci produknya, dan movement/cache batch ditulis di transaksi yang sama, jadi kunci produk sudah menyerialkan semua perubahan batch produk itu. Pembacaan FEFO dilakukan setelah kunci produk didapat (di PostgreSQL READ COMMITTED setiap statement melihat commit terakhir), dan cache batch ditulis sebagai nilai hasil hitung seperti cache produk. Tidak ada kode yang mengunci batch tanpa kunci produk, jadi tidak ada siklus kunci baru.
+- Pembuatan/penggabungan batch saat GR juga di bawah kunci produk (tidak ada indeks unik untuk `(product_id, expires_on, code)` karena `code` nullable; penggabungan dijaga kunci itu).
+- Tes `tests/Concurrency/BatchFefoRaceTest.php` (PostgreSQL, dua proses): (1) batch paling awal bersisa 1, dua checkout masing-masing 1 unit bersamaan → satu mengambil batch awal, yang lain batch berikutnya; Σ sisa batch = stok produk = awal − 2, tidak ada batch negatif, `stock:rebuild` cocok. (2) satu-satunya batch jual bersisa 2: `DisposeStock` 2 unit dan checkout 1 unit bersamaan → hanya satu yang berhasil, yang lain ditolak dengan pesan stok, tidak ada batch negatif. Keduanya harus merah bila `lockForUpdate()` di `StockLedger::lock()` dibuang sementara (dicek, seperti §17.6/§18.6).
+
+**P8. `stock:rebuild`**
+
+- Replay per produk **tidak berubah** (semua movement, termasuk yang berbatch).
+- Tambahan per batch, dari movement mentah: Σ `qty` per `stock_batch_id` = `stock_batches.qty_on_hand`, dan jumlah berjalan tidak pernah negatif. Untuk produk berflag: Σ sisa batch = `stock_on_hand`, dan Σ `qty` movement tanpa batch = 0 (sebelum pelacakan semua movement tanpa batch; pasangan `adjustment` P2 memindahkan totalnya ke batch). Untuk produk tanpa flag: tidak ada batch bersisa ≠ 0. `--fix` menulis ulang cache batch juga.
+
+**P9. Peringatan "hampir kedaluwarsa"** (rekomendasi: satu angka global)
+
+- `config('pos.expiry.warn_days')`, env `POS_EXPIRY_WARN_DAYS`, default **30** hari. Status batch: **kedaluwarsa** (`expires_on < hari ini`), **hampir** (≤ 30 hari lagi), **aman**, **tanpa tanggal**.
+- Alternatif: kolom per produk `expiry_warn_days` (nullable, menimpa angka global). Berguna untuk roti (umur 5–7 hari, jadi dengan 30 hari semua batch roti selalu "hampir"), tetapi menambah input di form produk; bisa ditambah kemudian tanpa migrasi yang merusak.
+
+**P10. Siapa yang melihat laporan kedaluwarsa** (rekomendasi: owner + gudang)
+
+- Laporan lain khusus owner (`routes/reports.php`), tetapi gudanglah yang membuang dan merotasi barang. Laporan kedaluwarsa ditaruh di grup `role:owner|gudang` (route `reports.expiry`, `/laporan/kedaluwarsa`), dengan ekspornya. Alternatif: owner saja, dan gudang cukup kartu dashboard.
+
+**Migrasi (expand saja, §9.6)**
+
+- Kolom baru: `products.tracks_expiry` (default `false`), `stock_movements.stock_batch_id` (nullable). Tabel baru: `stock_batches`, `stock_opname_item_batches`, `stock_disposals`, `stock_disposal_items`. Tipe movement baru `disposal` (`varchar(20)` sudah cukup). Tanpa backfill.
+- Selama migrasi berjalan, kode lama tidak membaca kolom/tabel baru; semua produk `tracks_expiry = false`, jadi kode lama dan baru menulis movement yang sama. Baris `disposal` hanya ditulis kode baru.
+
+### 19.3 Tampilan
+
+- **Form produk**: sakelar "Lacak tanggal kedaluwarsa"; saat dinyalakan dengan stok, keterangan "Stok sekarang (N pcs) dicatat sebagai batch tanpa tanggal. Beri tanggal lewat stok opname." Daftar produk: badge "Kedaluwarsa".
+- **Form GR dan terima PO**: baris produk berflag mendapat rincian tanggal (input `date`, kode opsional, qty) dengan tombol "+ tanggal lain"; jumlah rincian harus sama dengan qty baris. Detail GR menampilkan batch per produk.
+- **Kartu dashboard "Hampir kedaluwarsa"** (owner + gudang, di samping "Stok menipis"): jumlah batch kedaluwarsa bersisa (dan nilainya), jumlah yang ≤ N hari, lima batch terdekat (produk, tanggal, sisa, "3 hari lagi" / "lewat 2 hari"), tautan ke laporan, dan tombol "Buang yang kedaluwarsa" bila ada.
+- **Kartu stok**: bagian **Batch** di atas tabel (kode, kedaluwarsa, sisa, status) dan kolom **Batch** di tabel movement, dengan filter `?batch={id}`.
+- **Laporan → Kedaluwarsa** (`/laporan/kedaluwarsa`): semua batch bersisa dari produk berflag (produk, kode, kedaluwarsa, sisa, nilai pada HPP rata-rata, status), filter status, total per status. **Ekspor Excel + PDF** lewat `ReportTables::expiry()` (potret), route `reports.export.expiry` / `reports.pdf.expiry`.
+- **Stok opname**: produk berflag menampilkan satu baris hitungan per batch + "Tambah batch". **Halaman Buang barang** (`/stok-dibuang`, daftar + form + detail `DSP-…`), menu di bawah Stok opname.
+- **Layar kasir**: tidak berubah selain angka stok produk berflag = stok jual, dan pesan penolakan P5. **Struk tidak berubah.** Nilai persediaan tidak berubah (P3).
+
+### 19.4 Tidak dikerjakan
+
+- HPP per batch, harga jual berbeda per batch / diskon otomatis untuk barang hampir kedaluwarsa.
+- Memilih batch manual di layar kasir atau memindai kode batch/GS1; nomor seri per unit.
+- Pemberitahuan (email/WhatsApp) barang hampir kedaluwarsa; retur ke supplier.
+- Pembuangan barang rusak untuk produk tanpa flag (tetap lewat opname); batas peringatan per produk (P9 alternatif).
+- Multi-cabang / transfer batch antar gudang.
+
+### 19.5 Rencana tes (ditulis lebih dulu)
+
+- **Ledger**: produk tanpa flag menghasilkan movement dan cache yang sama persis seperti sebelumnya (`stock_batch_id` null). `startTracking()`/`stopTracking()`: pasangan `adjustment`, stok dan HPP tetap. `receive()` berbatch: batch baru/digabung, tanggal lewat ditolak, rincian yang tidak sama dengan qty ditolak. `issue()` FEFO lintas batch (tanpa tanggal dulu, lalu tanggal, lalu id), melewati batch kedaluwarsa, menolak dengan pesan stok jual; HPP baris = rata-rata.
+- **Penjualan**: tunai, kasbon (§17), dan QRIS/campuran saat settlement mengambil dari batch paling awal; satu baris dari dua batch → dua movement, `sale_items.cogs` benar; QRIS dibuat sebelum tengah malam dan dibayar sesudahnya tetap lunas; `StartQrisPayment` menolak bila stok jual kurang; katalog kasir mengirim stok jual.
+- **Retur**: kembali ke batch asal; dari dua batch → yang paling awal dulu, tidak melebihi yang diambil per batch; retur ke batch yang sudah kedaluwarsa tetap tercatat di batch itu.
+- **GR dari PO** dan GR langsung dengan rincian; `ReceivePurchaseOrder` tetap menolak melebihi sisa PO.
+- **Opname per batch**: selisih per batch, batch baru dari opname, stok tanpa tanggal dipindah ke batch bertanggal tanpa mengubah stok produk.
+- **Dibuang**: movement `disposal` per batch, alasan wajib, tidak bisa melebihi sisa batch, kasir 403; laba kotor tidak berubah.
+- **`stock:rebuild`**: cocok setelah skenario campuran; melaporkan selisih bila cache batch dirusak, bila Σ batch ≠ stok produk, dan bila ada movement tanpa batch yang tidak berpasangan pada produk berflag; `--fix` memperbaikinya.
+- **Tampilan & laporan**: kartu dashboard (batas hari dari config, `setTestNow`), kartu stok per batch dan filter, laporan kedaluwarsa + Excel/PDF dari `ReportTables` (isi sama), akses owner + gudang, kasir 403.
+- **Konkurensi**: `BatchFefoRaceTest` (P7), merah bila kunci produk dibuang.
+- `LastUnitRaceTest` dan seluruh suite lama tetap hijau tanpa diubah selain penyesuaian tipe kembalian `issue()` bila diperlukan.
+- `DemoSalesSeeder` tetap jalan: produk berflag dengan batch hampir dan sudah kedaluwarsa lewat Action asli; `stock:rebuild` (termasuk per batch) dan `receivables:rebuild` cocok.
+
+### 19.6 Data demo
+
+- `CatalogSeeder`: dua produk baru berflag, **Susu UHT Ultra Milk 250ml** (pcs / dus 24) dan **Roti Tawar Sari Roti** (pcs), dan **Teh Botol Sosro 450ml** dinyalakan flag-nya. Stok awal lewat `ReceiveGoods` dengan tanggal kedaluwarsa.
+- `DemoSalesSeeder`: restok produk berflag dengan tanggal berbeda (lewat GR/PO asli), sehingga di akhir 30 hari ada satu batch roti yang sudah kedaluwarsa bersisa, satu batch susu ≤ 7 hari, satu pembuangan roti kedaluwarsa di tengah bulan (`DisposeStock`), dan satu opname per batch. Penjualan otomatis mengambil FEFO. DB demo live baru berisi contoh ini setelah `demo-db` mode `reset` (menunggu izin); tanpa itu fitur bisa dicoba dengan menyalakan flag produk di demo.
