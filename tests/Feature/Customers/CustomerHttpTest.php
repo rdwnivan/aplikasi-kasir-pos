@@ -108,7 +108,7 @@ describe('payments at the till', function () {
                 ->where('debtors.0.openSales.0.owed', 25_000));
 
         $this->actingAs($this->cashier)->post(route('pos.payments.store'), ['customer_id' => $this->customer->id, 'amount' => 10_000])
-            ->assertRedirect(route('pos.payments.create'))
+            ->assertRedirect(route('pos.payments.create', ['pelanggan' => $this->customer->id]))
             ->assertSessionHasNoErrors();
 
         $payment = CustomerPayment::sole();
@@ -120,6 +120,27 @@ describe('payments at the till', function () {
             ->assertSeeText($sale->number)
             ->assertSeeText('Sisa utang')
             ->assertSeeText('15.000');
+    });
+
+    it('keeps the customer selected after a cash payment and shows the success dialog once', function () {
+        kasbon($this);
+
+        $this->actingAs($this->cashier)->post(route('pos.payments.store'), ['customer_id' => $this->customer->id, 'amount' => 10_000])
+            ->assertRedirect(route('pos.payments.create', ['pelanggan' => $this->customer->id]));
+
+        $payment = CustomerPayment::sole();
+
+        $this->actingAs($this->cashier)->get(route('pos.payments.create', ['pelanggan' => $this->customer->id]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('customerId', $this->customer->id)
+                ->where('lastPayment.id', $payment->id)
+                ->where('lastPayment.balance', 15_000));
+
+        // The flash is spent: a reload keeps the customer but not the dialog.
+        $this->actingAs($this->cashier)->get(route('pos.payments.create', ['pelanggan' => $this->customer->id]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('customerId', $this->customer->id)
+                ->where('lastPayment', null));
     });
 
     it('shows the shift drawer including payments', function () {

@@ -73,7 +73,8 @@ class CustomerPaymentController extends Controller
 
         $request->session()->flash('last_payment_id', $payment->id);
 
-        return to_route('pos.payments.create');
+        // Keep the customer selected, as the QRIS flow does (DESIGN.md §18.6).
+        return to_route('pos.payments.create', ['pelanggan' => $customer->id]);
     }
 
     public function receipt(Request $request, CustomerPayment $payment): View

@@ -94,6 +94,20 @@ it('takes a cash down payment, which goes into the drawer', function () {
         ->and($this->shift->fresh()->cashSalesCount())->toBe(1);
 });
 
+it('counts only sales that put cash in the drawer as cash sales, so kasbon without a down payment is left out', function () {
+    $this->checkout->handle($this->cashier, [['product_unit_id' => $this->berasPcs->id, 'qty' => 1]], paidAmount: 77_700);
+    creditSale($this, 1); // no down payment: no cash
+    creditSale($this, 1, downPayment: 20_000);
+
+    $shift = $this->shift->fresh();
+    expect($shift->cashSalesCount())->toBe(2)
+        ->and($shift->cashSalesTotal())->toBe(97_700);
+
+    // The till header and the Tutup shift page read the same number.
+    $this->actingAs($this->cashier)->get(route('pos.shift.edit'))
+        ->assertInertia(fn ($page) => $page->where('shift.salesCount', 2)->where('shift.cashSalesTotal', 97_700));
+});
+
 it('refuses kasbon over the credit limit, with what is left of it', function () {
     creditSale($this, 5); // 388.500 of 500.000
 

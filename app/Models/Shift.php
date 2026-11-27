@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\PaymentMethod;
 use App\Enums\SaleStatus;
 use App\Reports\Sql;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -71,12 +70,15 @@ class Shift extends Model
             ->sum(DB::raw(Sql::cashPart())));
     }
 
-    /** Completed sales that (may) put cash in the drawer: cash, mixed, and kasbon with its down payment. */
+    /**
+     * Completed sales that put cash in the drawer: the same cash part as cashSalesTotal(), so
+     * kasbon without a down payment (and plain QRIS) is not counted.
+     */
     public function cashSalesCount(): int
     {
         return $this->sales()
             ->where('status', SaleStatus::Completed)
-            ->whereIn('payment_method', PaymentMethod::cashMethods())
+            ->whereRaw('('.Sql::cashPart().') > 0')
             ->count();
     }
 

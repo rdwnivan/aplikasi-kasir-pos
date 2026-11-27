@@ -32,10 +32,4 @@ enum PaymentMethod: string
     {
         return [self::Qris, self::Split];
     }
-
-    /** @return list<self> Methods that put some cash into the drawer at checkout. */
-    public static function cashMethods(): array
-    {
-        return [self::Cash, self::Split, self::Credit];
-    }
 }
