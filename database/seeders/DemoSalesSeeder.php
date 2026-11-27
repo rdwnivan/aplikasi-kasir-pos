@@ -3,7 +3,9 @@
 namespace Database\Seeders;
 
 use App\Actions\Customers\CreateCustomer;
+use App\Actions\Customers\QrisCustomerPayments;
 use App\Actions\Customers\ReceiveCustomerPayment;
+use App\Actions\Customers\StartQrisCustomerPayment;
 use App\Actions\Inventory\ReceiveGoods;
 use App\Actions\Purchasing\OrderPurchaseOrder;
 use App\Actions\Purchasing\ReceivePurchaseOrder;
@@ -27,8 +29,11 @@ use App\Services\Sales\CartBuilder;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Seeder;
+use Illuminate\Http\Client\Factory as HttpFactory;
+use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Http;
 
 /**
  * Thirty days of shop life for the demo dashboard and reports: a cashier shift every day,
@@ -132,7 +137,47 @@ class DemoSalesSeeder extends Seeder
         $amount = mt_rand(1, 2) === 1 ? $customer->balance : max(1, intdiv($customer->balance, 2) - intdiv($customer->balance, 2) % 5_000);
 
         Carbon::setTestNow($at);
-        app(ReceiveCustomerPayment::class)->handle($cashier, $customer, $amount, $amount === $customer->balance ? 'Lunas' : null);
+        $note = $amount === $customer->balance ? 'Lunas' : null;
+
+        // About a third pay by QRIS (DESIGN.md §18), already settled.
+        if (mt_rand(1, 3) === 1) {
+            $this->payByQris($cashier, $customer, $amount, $note);
+
+            return;
+        }
+
+        app(ReceiveCustomerPayment::class)->handle($cashier, $customer, $amount, $note);
+    }
+
+    /**
+     * A QRIS pelunasan through the real actions: StartQrisCustomerPayment, then settlement.
+     * Midtrans's charge endpoint is faked only for this call (seeding never talks to the
+     * sandbox), with a stand-in server key; both are put back afterwards.
+     */
+    private function payByQris(User $cashier, Customer $customer, int $amount, ?string $note): void
+    {
+        $serverKey = config('services.midtrans.server_key');
+        $http = Http::getFacadeRoot();
+        config(['services.midtrans.server_key' => 'demo-seeder']);
+        // A factory of its own, so the stub never outlives this call or mixes with a test's fakes.
+        Http::swap(new HttpFactory(app('events')));
+        Http::preventStrayRequests();
+        Http::fake(['*/v2/charge' => fn (HttpRequest $request) => Http::response([
+            'status_code' => '201',
+            'transaction_id' => 'demo-'.$request['transaction_details']['order_id'],
+            'transaction_status' => 'pending',
+            'actions' => [],
+            'qr_string' => null,
+            'expiry_time' => now()->addMinutes(15)->setTimezone('Asia/Jakarta')->format('Y-m-d H:i:s'),
+        ], 201)]);
+
+        try {
+            $payment = app(StartQrisCustomerPayment::class)->handle($cashier, $customer, $amount, $note);
+            app(QrisCustomerPayments::class)->settle($payment);
+        } finally {
+            config(['services.midtrans.server_key' => $serverKey]);
+            Http::swap($http);
+        }
     }
 
     /** One unit back from the latest kasbon: it comes off the debt (DESIGN.md §17.2). */

@@ -19,7 +19,10 @@ final class WriteOffCustomerDebt
 {
     use SavesCustomers;
 
-    public function __construct(private readonly CustomerLedger $ledger) {}
+    public function __construct(
+        private readonly CustomerLedger $ledger,
+        private readonly QrisCustomerPayments $qris,
+    ) {}
 
     public function handle(User $owner, Customer $customer, string $reason, ?Sale $sale = null): CustomerWriteOff
     {
@@ -29,8 +32,11 @@ final class WriteOffCustomerDebt
             throw ValidationException::withMessages(['reason' => 'Alasan wajib diisi.']);
         }
 
+        $this->qris->clearExpired($customer);
+
         return DB::transaction(function () use ($owner, $customer, $reason, $sale) {
             $locked = $this->ledger->lock($customer);
+            QrisCustomerPayments::ensureNoneWaiting($locked);
 
             if ($sale !== null && $sale->customer_id !== $locked->id) {
                 throw ValidationException::withMessages(['sale' => 'Transaksi ini bukan kasbon pelanggan ini.']);

@@ -131,6 +131,9 @@ it('adds a Kasbon column to the sales and shift exports', function () {
 
     $shifts = ReportTables::shifts(DateRange::of('2026-07-01', '2026-11-27'));
     foreach ($shifts->sheets() as $table) {
-        expect(array_column($table['columns'], 'label'))->toContain('Kasbon')->toContain('Pelunasan');
+        // Cash and QRIS pelunasan apart: only cash goes in the drawer (DESIGN.md §18).
+        expect(array_column($table['columns'], 'label'))->toContain('Kasbon')->toContain('Pelunasan tunai')->toContain('Pelunasan QRIS');
     }
+    expect(count($shifts->sheets()[0]['columns']))->toBe(10)
+        ->and(count($shifts->sheets()[1]['columns']))->toBe(16);
 });

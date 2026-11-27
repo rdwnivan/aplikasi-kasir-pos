@@ -15,6 +15,28 @@ use Illuminate\Support\Facades\Log;
  */
 final class MidtransClient
 {
+    public const SETTLE = 'settle';
+
+    public const CANCEL = 'cancel';
+
+    public const NONE = 'none';
+
+    /**
+     * What a Midtrans transaction_status means for a QR we are waiting on. Shared by the
+     * sale and the pelunasan state machines (DESIGN.md §9.3, §18).
+     *
+     * @return self::SETTLE|self::CANCEL|self::NONE
+     */
+    public static function outcome(string $transactionStatus, ?string $fraudStatus = null): string
+    {
+        return match (true) {
+            $transactionStatus === 'settlement',
+            $transactionStatus === 'capture' && in_array($fraudStatus, [null, 'accept'], true) => self::SETTLE,
+            in_array($transactionStatus, ['expire', 'cancel', 'deny', 'failure'], true) => self::CANCEL,
+            default => self::NONE, // pending, authorize, refund… nothing for the till to do
+        };
+    }
+
     public function isConfigured(): bool
     {
         return $this->serverKey() !== '';

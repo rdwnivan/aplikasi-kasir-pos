@@ -60,7 +60,7 @@ class Shift extends Model
      */
     public function expectedCash(): int
     {
-        return $this->opening_cash + $this->cashSalesTotal() + $this->paymentsTotal() - $this->refundsTotal();
+        return $this->opening_cash + $this->cashSalesTotal() + $this->cashPaymentsTotal() - $this->refundsTotal();
     }
 
     /** Cash taken in: whole cash sales plus the cash part of mixed and kasbon sales. */
@@ -89,9 +89,21 @@ class Shift extends Model
     }
 
     /** Kasbon paid off in cash into this drawer (DESIGN.md §17). */
-    public function paymentsTotal(): int
+    public function cashPaymentsTotal(): int
     {
-        return (int) $this->customerPayments()->sum('amount');
+        return (int) $this->receivedPayments(CustomerPayment::CASH)->sum('amount');
+    }
+
+    /** Kasbon paid off by QRIS on this shift: shown, never in the drawer (DESIGN.md §18). */
+    public function qrisPaymentsTotal(): int
+    {
+        return (int) $this->receivedPayments(CustomerPayment::QRIS)->sum('amount');
+    }
+
+    /** @return HasMany<CustomerPayment, $this> Payments received here (not waiting or cancelled QRIS). */
+    public function receivedPayments(string $method): HasMany
+    {
+        return $this->customerPayments()->received()->where('method', $method);
     }
 
     /** Cash paid out for returns; the part of a return that came off a kasbon debt is not cash. */

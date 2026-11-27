@@ -2,6 +2,7 @@
 
 namespace App\Reports;
 
+use App\Enums\CustomerPaymentStatus;
 use App\Models\Customer;
 use App\Support\DateRange;
 use Carbon\CarbonImmutable;
@@ -40,7 +41,13 @@ final class Receivables
             ->selectRaw('customer_ledger_entries.customer_id AS customer_id, sales.completed_at AS completed_at, SUM(customer_ledger_entries.amount) AS owed')
             ->get();
 
-        $lastPayments = DB::table('customer_payments')->groupBy('customer_id')->selectRaw('customer_id, MAX(created_at) AS at')->pluck('at', 'customer_id');
+        // Money received only (a waiting or cancelled QRIS is not a payment); cash rows from
+        // before DESIGN.md §18 have no completed_at.
+        $lastPayments = DB::table('customer_payments')
+            ->where('status', CustomerPaymentStatus::Completed->value)
+            ->groupBy('customer_id')
+            ->selectRaw('customer_id, MAX(COALESCE(completed_at, created_at)) AS at')
+            ->pluck('at', 'customer_id');
         $customers = Customer::query()->whereIn('id', $open->pluck('customer_id')->unique())->get()->keyBy('id');
 
         $rows = [];

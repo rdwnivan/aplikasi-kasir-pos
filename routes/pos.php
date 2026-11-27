@@ -3,6 +3,7 @@
 use App\Enums\Role;
 use App\Http\Controllers\Pos\CustomerController;
 use App\Http\Controllers\Pos\CustomerPaymentController;
+use App\Http\Controllers\Pos\CustomerPaymentQrisController;
 use App\Http\Controllers\Pos\HeldSaleController;
 use App\Http\Controllers\Pos\PosController;
 use App\Http\Controllers\Pos\QrisController;
@@ -40,6 +41,10 @@ Route::middleware(['auth', 'verified', 'role:'.Role::Cashier->value.'|'.Role::Ow
         Route::get('pelunasan', [CustomerPaymentController::class, 'create'])->name('payments.create');
         Route::post('pelunasan', [CustomerPaymentController::class, 'store'])->name('payments.store');
         Route::get('pelunasan/{payment}/struk', [CustomerPaymentController::class, 'receipt'])->name('payments.receipt');
+        // Pelunasan by QRIS (DESIGN.md §18): start, poll, cancel.
+        Route::post('pelunasan/qris', [CustomerPaymentQrisController::class, 'store'])->name('payments.qris.store');
+        Route::get('pelunasan/{payment}/qris', [CustomerPaymentQrisController::class, 'show'])->name('payments.qris.show');
+        Route::post('pelunasan/{payment}/qris/batal', [CustomerPaymentQrisController::class, 'cancel'])->name('payments.qris.cancel');
 
         Route::post('ditahan', [HeldSaleController::class, 'store'])->name('held.store');
         Route::delete('ditahan/{sale}', [HeldSaleController::class, 'destroy'])->name('held.destroy');

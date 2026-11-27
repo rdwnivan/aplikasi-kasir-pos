@@ -7,6 +7,7 @@ use App\Enums\SaleStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Pos\PosController;
 use App\Http\Controllers\Pos\ShiftController;
+use App\Models\CustomerPayment;
 use App\Models\Sale;
 use App\Models\Shift;
 use Illuminate\Http\RedirectResponse;
@@ -38,6 +39,17 @@ class ShiftCloseController extends Controller
                     'number' => $sale->number,
                     'total' => $sale->total,
                     'cashAmount' => $sale->cashPart(),
+                ])->all(),
+            // QRIS pelunasan waiting on this shift: checked with Midtrans, then settled or cancelled (§18).
+            'pendingPayments' => $shift->customerPayments()
+                ->waiting()
+                ->with('customer')
+                ->orderBy('id')
+                ->get()
+                ->map(fn (CustomerPayment $payment) => [
+                    'number' => $payment->number,
+                    'customer' => $payment->customer->name,
+                    'amount' => $payment->amount,
                 ])->all(),
             // A hint that the cashier may still be serving customers on this shift.
             'lastSaleAt' => $lastSale?->completed_at?->toIso8601String(),

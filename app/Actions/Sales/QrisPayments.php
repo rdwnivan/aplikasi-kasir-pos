@@ -45,11 +45,10 @@ final class QrisPayments
      */
     public function apply(Sale $sale, string $transactionStatus, ?string $fraudStatus = null): string
     {
-        return match (true) {
-            $transactionStatus === 'settlement',
-            $transactionStatus === 'capture' && in_array($fraudStatus, [null, 'accept'], true) => $this->settle($sale),
-            in_array($transactionStatus, ['expire', 'cancel', 'deny', 'failure'], true) => $this->cancel($sale),
-            default => self::UNCHANGED, // pending, authorize, refund… nothing for the till to do
+        return match (MidtransClient::outcome($transactionStatus, $fraudStatus)) {
+            MidtransClient::SETTLE => $this->settle($sale),
+            MidtransClient::CANCEL => $this->cancel($sale),
+            default => self::UNCHANGED,
         };
     }
 

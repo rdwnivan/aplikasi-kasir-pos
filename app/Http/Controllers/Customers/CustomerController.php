@@ -78,6 +78,18 @@ class CustomerController extends Controller
         ]);
     }
 
+    /** @return array{number: string, amount: int, cashier: string}|null */
+    private static function waitingQris(Customer $customer): ?array
+    {
+        $payment = CustomerPayment::query()->where('customer_id', $customer->id)->waiting()->with('user')->first();
+
+        return $payment === null ? null : [
+            'number' => $payment->number,
+            'amount' => $payment->amount,
+            'cashier' => $payment->user->name,
+        ];
+    }
+
     public function show(Request $request, Customer $customer, CustomerLedger $ledger): Response
     {
         $customer->load('creator');
@@ -113,7 +125,7 @@ class CustomerController extends Controller
                 'saleId' => $e->sale_id,
                 'saleNumber' => $e->sale->number,
                 'document' => match (true) {
-                    $e->reference instanceof CustomerPayment => ['kind' => 'payment', 'id' => $e->reference->id, 'number' => $e->reference->number],
+                    $e->reference instanceof CustomerPayment => ['kind' => 'payment', 'id' => $e->reference->id, 'number' => $e->reference->number, 'method' => $e->reference->method],
                     $e->reference instanceof SaleReturn => ['kind' => 'return', 'id' => $e->reference->id, 'number' => $e->reference->number],
                     $e->reference instanceof Sale => ['kind' => 'sale', 'id' => $e->reference->id, 'number' => $e->reference->number],
                     default => null,
@@ -123,6 +135,8 @@ class CustomerController extends Controller
                 'amount' => $e->amount,
                 'balanceAfter' => $e->balance_after,
             ])->values(),
+            // Why a payment or write-off is refused right now (DESIGN.md §18.2).
+            'waitingQris' => self::waitingQris($customer),
             'canManage' => $request->user()->hasRole(Role::Owner->value),
         ]);
     }

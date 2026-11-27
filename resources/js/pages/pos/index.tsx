@@ -736,7 +736,31 @@ export default function PosIndex({
                 onQris={startQris}
                 onCredit={submitCredit}
             />
-            <QrisDialog payment={pendingQris} onPaid={onQrisPaid} />
+            <QrisDialog
+                payment={pendingQris}
+                onPaid={onQrisPaid}
+                statusUrl={(id) => pos.qris.show.url(id)}
+                cancelUrl={(id) => pos.qris.cancel.url(id)}
+                reloadOnly="pendingQris"
+                note={
+                    pendingQris && pendingQris.cashAmount > 0
+                        ? `Total ${formatRupiah(pendingQris.total)} · tunai ${formatRupiah(pendingQris.cashAmount)} sudah diterima`
+                        : undefined
+                }
+                cancelledNote={
+                    <>
+                        QRIS kedaluwarsa atau dibatalkan. Keranjang masih ada;
+                        pilih cara bayar lain atau buat QRIS baru.
+                        {pendingQris && pendingQris.cashAmount > 0 && (
+                            <p className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 font-medium">
+                                Kembalikan uang tunai{' '}
+                                {formatRupiah(pendingQris.cashAmount)} ke
+                                pelanggan.
+                            </p>
+                        )}
+                    </>
+                }
+            />
             <HoldDialog
                 open={dialog === 'hold'}
                 processing={processing}

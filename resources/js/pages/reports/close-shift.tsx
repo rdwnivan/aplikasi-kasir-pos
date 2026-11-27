@@ -21,6 +21,7 @@ import reports from '@/routes/reports';
 import type { ShiftSummary } from '@/types/pos';
 
 type PendingQris = { number: string; total: number; cashAmount: number };
+type PendingPayment = { number: string; customer: string; amount: number };
 
 const relative = new Intl.RelativeTimeFormat('id-ID', { numeric: 'auto' });
 
@@ -43,12 +44,14 @@ export default function OwnerCloseShift({
     cashier,
     heldCount,
     pendingQris,
+    pendingPayments,
     lastSaleAt,
 }: {
     shift: ShiftSummary;
     cashier: string;
     heldCount: number;
     pendingQris: PendingQris[];
+    pendingPayments: PendingPayment[];
     lastSaleAt: string | null;
 }) {
     const form = useForm({ counted_cash: 0, reason: '' });
@@ -81,7 +84,7 @@ export default function OwnerCloseShift({
                             />
                             {shift.paymentsCount > 0 && (
                                 <Row
-                                    label={`Pelunasan kasbon (${shift.paymentsCount})`}
+                                    label={`Pelunasan kasbon tunai (${shift.paymentsCount})`}
                                     value={formatRupiah(shift.paymentsTotal)}
                                 />
                             )}
@@ -98,6 +101,13 @@ export default function OwnerCloseShift({
                                 strong
                             />
                         </dl>
+                        {shift.qrisPaymentsCount > 0 && (
+                            <p className="-mt-3 text-xs text-muted-foreground">
+                                Pelunasan QRIS ({shift.qrisPaymentsCount}){' '}
+                                {formatRupiah(shift.qrisPaymentsTotal)} — tidak
+                                masuk laci.
+                            </p>
+                        )}
 
                         {lastSaleAt && (
                             <Alert>
@@ -111,7 +121,9 @@ export default function OwnerCloseShift({
                             </Alert>
                         )}
 
-                        {(pendingQris.length > 0 || heldCount > 0) && (
+                        {(pendingQris.length > 0 ||
+                            pendingPayments.length > 0 ||
+                            heldCount > 0) && (
                             <Alert variant="destructive">
                                 <AlertTriangle />
                                 <AlertDescription>
@@ -125,6 +137,17 @@ export default function OwnerCloseShift({
                                                 belum dibayar.
                                                 {q.cashAmount > 0 &&
                                                     ` Bagian tunai ${formatRupiah(q.cashAmount)} hanya dihitung bila QRIS-nya lunas.`}
+                                            </li>
+                                        ))}
+                                        {pendingPayments.map((p) => (
+                                            <li key={p.number}>
+                                                QRIS pelunasan {p.number} (
+                                                {p.customer},{' '}
+                                                {formatRupiah(p.amount)}) masih
+                                                menunggu pembayaran: dicek ke
+                                                Midtrans; bila sudah dibayar
+                                                utangnya berkurang, bila belum
+                                                dibatalkan.
                                             </li>
                                         ))}
                                         {heldCount > 0 && (

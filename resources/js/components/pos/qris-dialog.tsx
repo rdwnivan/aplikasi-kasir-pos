@@ -1,6 +1,7 @@
 import { router } from '@inertiajs/react';
 import { Loader2, QrCode, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -11,14 +12,31 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { formatRupiah } from '@/lib/money';
-import pos from '@/routes/pos';
-import type { PendingQris } from '@/types/pos';
 
 type Status = 'pending_payment' | 'completed' | 'cancelled';
 
+/** What any QR on screen needs: a sale (DESIGN.md §9.3) or a pelunasan (§18). */
+export type QrisTarget = {
+    id: number;
+    number: string;
+    /** What the QR charges. */
+    amount: number;
+    qrUrl: string | null;
+    expiresAt: string | null;
+};
+
 type Props = {
-    payment: PendingQris | null;
+    payment: QrisTarget | null;
     onPaid: () => void;
+    /** Polling endpoint (JSON with `status`) and the cancel action for this kind of QR. */
+    statusUrl: (id: number) => string;
+    cancelUrl: (id: number) => string;
+    /** Inertia prop to reload once the QR is gone, which closes the dialog. */
+    reloadOnly: string;
+    /** Under the amount, e.g. the cash part of a mixed sale or the customer's name. */
+    note?: ReactNode;
+    /** Shown when the QR expired or was cancelled. */
+    cancelledNote: ReactNode;
 };
 
 const POLL_MS = 3000;
@@ -39,7 +57,15 @@ function remaining(expiresAt: string | null): number | null {
  * cancelled. The server asks Midtrans directly on each poll, so this works without the
  * webhook reaching the machine (handy on a laptop).
  */
-export function QrisDialog({ payment, onPaid }: Props) {
+export function QrisDialog({
+    payment,
+    onPaid,
+    statusUrl,
+    cancelUrl,
+    reloadOnly,
+    note,
+    cancelledNote,
+}: Props) {
     const [status, setStatus] = useState<Status>('pending_payment');
     const [seconds, setSeconds] = useState<number | null>(null);
     const [cancelling, setCancelling] = useState(false);
@@ -56,7 +82,7 @@ export function QrisDialog({ payment, onPaid }: Props) {
 
         const poll = async () => {
             try {
-                const response = await fetch(pos.qris.show.url(id), {
+                const response = await fetch(statusUrl(id), {
                     headers: { Accept: 'application/json' },
                 });
 
@@ -90,7 +116,7 @@ export function QrisDialog({ payment, onPaid }: Props) {
             stopped = true;
             window.clearInterval(timer);
         };
-    }, [id, onPaid]);
+    }, [id, onPaid, statusUrl]);
 
     useEffect(() => {
         setSeconds(remaining(expiresAt));
@@ -104,7 +130,7 @@ export function QrisDialog({ payment, onPaid }: Props) {
 
     const cancel = () =>
         router.post(
-            pos.qris.cancel.url(id ?? 0),
+            cancelUrl(id ?? 0),
             {},
             {
                 preserveScroll: true,
@@ -113,7 +139,7 @@ export function QrisDialog({ payment, onPaid }: Props) {
             },
         );
 
-    const closeAfterFailure = () => router.reload({ only: ['pendingQris'] });
+    const closeAfterFailure = () => router.reload({ only: [reloadOnly] });
 
     return (
         <Dialog open={payment !== null}>
@@ -134,11 +160,9 @@ export function QrisDialog({ payment, onPaid }: Props) {
                             <div className="text-3xl font-bold tracking-tight tabular-nums">
                                 {formatRupiah(payment.amount)}
                             </div>
-                            {payment.cashAmount > 0 && (
+                            {note && (
                                 <p className="text-sm text-muted-foreground">
-                                    Total {formatRupiah(payment.total)} · tunai{' '}
-                                    {formatRupiah(payment.cashAmount)} sudah
-                                    diterima
+                                    {note}
                                 </p>
                             )}
                         </DialogHeader>
@@ -146,16 +170,7 @@ export function QrisDialog({ payment, onPaid }: Props) {
                         {status === 'cancelled' ? (
                             <div className="flex flex-col items-center gap-2 py-6 text-center text-sm">
                                 <XCircle className="size-10 text-destructive" />
-                                QRIS kedaluwarsa atau dibatalkan. Keranjang
-                                masih ada; pilih cara bayar lain atau buat QRIS
-                                baru.
-                                {payment.cashAmount > 0 && (
-                                    <p className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 font-medium">
-                                        Kembalikan uang tunai{' '}
-                                        {formatRupiah(payment.cashAmount)} ke
-                                        pelanggan.
-                                    </p>
-                                )}
+                                {cancelledNote}
                             </div>
                         ) : (
                             <>

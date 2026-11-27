@@ -2,6 +2,7 @@
 
 namespace App\Reports;
 
+use App\Enums\CustomerPaymentStatus;
 use App\Enums\SaleStatus;
 use App\Models\Shift;
 use App\Support\DateRange;
@@ -44,11 +45,16 @@ final class ShiftRecap
             ->get()
             ->keyBy('shift_id');
 
+        // Pelunasan received: cash goes in the drawer, QRIS does not (DESIGN.md §18).
         $payments = DB::table('customer_payments')
             ->whereIn('shift_id', $ids)
+            ->where('status', CustomerPaymentStatus::Completed->value)
             ->groupBy('shift_id')
-            ->selectRaw('shift_id, SUM(amount) AS payments')
-            ->pluck('payments', 'shift_id');
+            ->selectRaw('shift_id')
+            ->selectRaw("SUM(CASE WHEN method = 'qris' THEN 0 ELSE amount END) AS cash")
+            ->selectRaw("SUM(CASE WHEN method = 'qris' THEN amount ELSE 0 END) AS qris")
+            ->get()
+            ->keyBy('shift_id');
 
         $rows = [];
         $cashiers = [];
@@ -57,7 +63,8 @@ final class ShiftRecap
             $r = $refunds->get($shift->id);
             $cash = Sql::rupiah($s->cash ?? 0);
             $refund = Sql::rupiah($r->refunds ?? 0);
-            $paid = Sql::rupiah($payments->get($shift->id) ?? 0);
+            $p = $payments->get($shift->id);
+            $paid = Sql::rupiah($p->cash ?? 0);
 
             $row = [
                 'id' => $shift->id,
@@ -69,7 +76,8 @@ final class ShiftRecap
                 'cashSales' => $cash,
                 'qrisSales' => Sql::rupiah($s->qris ?? 0),
                 'creditSales' => Sql::rupiah($s->credit ?? 0),
-                'payments' => $paid,
+                'payments' => $paid, // cash pelunasan, in the drawer
+                'qrisPayments' => Sql::rupiah($p->qris ?? 0),
                 'refunds' => $refund,
                 'expectedCash' => $shift->expected_cash ?? $shift->opening_cash + $cash + $paid - $refund,
                 'countedCash' => $shift->counted_cash,
@@ -81,13 +89,14 @@ final class ShiftRecap
             $rows[] = $row;
 
             $name = $row['cashier'];
-            $cashiers[$name] ??= ['cashier' => $name, 'shifts' => 0, 'transactions' => 0, 'cashSales' => 0, 'qrisSales' => 0, 'creditSales' => 0, 'payments' => 0, 'refunds' => 0, 'difference' => null];
+            $cashiers[$name] ??= ['cashier' => $name, 'shifts' => 0, 'transactions' => 0, 'cashSales' => 0, 'qrisSales' => 0, 'creditSales' => 0, 'payments' => 0, 'qrisPayments' => 0, 'refunds' => 0, 'difference' => null];
             $cashiers[$name]['shifts']++;
             $cashiers[$name]['transactions'] += $row['transactions'];
             $cashiers[$name]['cashSales'] += $row['cashSales'];
             $cashiers[$name]['qrisSales'] += $row['qrisSales'];
             $cashiers[$name]['creditSales'] += $row['creditSales'];
             $cashiers[$name]['payments'] += $row['payments'];
+            $cashiers[$name]['qrisPayments'] += $row['qrisPayments'];
             $cashiers[$name]['refunds'] += $row['refunds'];
             if ($row['difference'] !== null) { // only closed shifts have one
                 $cashiers[$name]['difference'] = ($cashiers[$name]['difference'] ?? 0) + $row['difference'];

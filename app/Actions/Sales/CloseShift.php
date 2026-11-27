@@ -28,6 +28,10 @@ final class CloseShift
                 throw ValidationException::withMessages(['shift' => 'Masih ada QRIS yang menunggu pembayaran. Selesaikan atau batalkan dulu.']);
             }
 
+            if ($locked->customerPayments()->waiting()->exists()) {
+                throw ValidationException::withMessages(['shift' => 'Masih ada QRIS pelunasan yang menunggu pembayaran. Selesaikan atau batalkan dulu.']);
+            }
+
             if ($locked->sales()->where('status', SaleStatus::Held)->exists()) {
                 throw ValidationException::withMessages(['shift' => 'Masih ada transaksi yang ditahan. Selesaikan atau hapus dulu.']);
             }

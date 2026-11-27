@@ -6,6 +6,7 @@ use App\Enums\LedgerEntryType;
 use App\Enums\SaleStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
+use App\Models\CustomerPayment;
 use App\Models\ProductUnit;
 use App\Models\Sale;
 use App\Models\SaleItem;
@@ -102,8 +103,11 @@ class PosController extends Controller
             'refundsCount' => $shift->returns()->count(),
             'refundsTotal' => $shift->refundsTotal(),
             'creditSalesTotal' => $shift->creditSalesTotal(),
-            'paymentsCount' => $shift->customerPayments()->count(),
-            'paymentsTotal' => $shift->paymentsTotal(),
+            // Cash pelunasan (in the drawer) and QRIS pelunasan (not), DESIGN.md §18.
+            'paymentsCount' => $shift->receivedPayments(CustomerPayment::CASH)->count(),
+            'paymentsTotal' => $shift->cashPaymentsTotal(),
+            'qrisPaymentsCount' => $shift->receivedPayments(CustomerPayment::QRIS)->count(),
+            'qrisPaymentsTotal' => $shift->qrisPaymentsTotal(),
             'expectedCash' => $shift->expectedCash(),
         ];
     }

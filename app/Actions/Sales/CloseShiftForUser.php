@@ -2,7 +2,10 @@
 
 namespace App\Actions\Sales;
 
+use App\Actions\Customers\QrisCustomerPayments;
+use App\Enums\CustomerPaymentStatus;
 use App\Enums\SaleStatus;
+use App\Models\CustomerPayment;
 use App\Models\Sale;
 use App\Models\Shift;
 use App\Models\User;
@@ -20,7 +23,10 @@ use Illuminate\Validation\ValidationException;
  */
 final class CloseShiftForUser
 {
-    public function __construct(private readonly QrisPayments $payments) {}
+    public function __construct(
+        private readonly QrisPayments $payments,
+        private readonly QrisCustomerPayments $customerPayments,
+    ) {}
 
     public function handle(User $owner, Shift $shift, int $countedCash, string $reason): Shift
     {
@@ -40,6 +46,10 @@ final class CloseShiftForUser
         $shift->sales()->where('status', SaleStatus::PendingPayment)->get()
             ->each(fn (Sale $sale) => $this->payments->cancelByCashier($sale));
 
+        // QRIS pelunasan waiting on this shift (DESIGN.md §18): the same treatment.
+        $shift->customerPayments()->waiting()->get()
+            ->each(fn (CustomerPayment $payment) => $this->customerPayments->cancelByCashier($payment));
+
         return DB::transaction(function () use ($owner, $shift, $countedCash, $reason) {
             $locked = CloseShift::lockOpen($shift);
 
@@ -48,6 +58,9 @@ final class CloseShiftForUser
 
             $locked->sales()->where('status', SaleStatus::PendingPayment)->lockForUpdate()->get()
                 ->each(fn (Sale $sale) => $sale->forceFill(['status' => SaleStatus::Cancelled])->save());
+
+            $locked->customerPayments()->waiting()->lockForUpdate()->get()
+                ->each(fn (CustomerPayment $payment) => $payment->forceFill(['status' => CustomerPaymentStatus::Cancelled])->save());
 
             return CloseShift::closeLocked($locked, $countedCash, $owner->id, reason: $reason);
         });

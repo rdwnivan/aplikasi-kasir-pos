@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Pos;
 
 use App\Actions\Customers\ReceiveCustomerPayment;
+use App\Enums\CustomerPaymentStatus;
 use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
@@ -10,6 +11,7 @@ use App\Models\CustomerLedgerEntry;
 use App\Models\CustomerPayment;
 use App\Models\Shift;
 use App\Reports\Receivables;
+use App\Services\Payments\MidtransClient;
 use App\Services\Receivables\CustomerLedger;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
@@ -21,7 +23,7 @@ use Inertia\Response;
 /** Pelunasan kasbon at the till: cash into the receiving user's open shift (DESIGN.md §17). */
 class CustomerPaymentController extends Controller
 {
-    public function create(Request $request, CustomerLedger $ledger): Response|RedirectResponse
+    public function create(Request $request, CustomerLedger $ledger, MidtransClient $midtrans): Response|RedirectResponse
     {
         $shift = Shift::query()->open()->where('user_id', $request->user()->id)->first();
 
@@ -29,8 +31,13 @@ class CustomerPaymentController extends Controller
             return to_route('pos.index');
         }
 
+        // Customers held by a QRIS pelunasan waiting at any till (DESIGN.md §18.2).
+        $waiting = CustomerPayment::query()->waiting()->pluck('number', 'customer_id');
+
         return Inertia::render('pos/payments', [
             'shift' => PosController::shiftSummary($shift),
+            'qrisEnabled' => $midtrans->isConfigured(),
+            'pendingPayment' => self::pendingPayment($shift),
             'debtors' => Customer::query()->where('balance', '>', 0)->orderBy('name')->get()
                 ->map(fn (Customer $c) => [
                     'id' => $c->id,
@@ -38,6 +45,7 @@ class CustomerPaymentController extends Controller
                     'phone' => $c->phone,
                     'balance' => $c->balance,
                     'active' => $c->isActive(),
+                    'waitingQris' => $waiting[$c->id] ?? null,
                     'openSales' => array_map(fn (array $s) => [
                         'id' => $s['sale_id'],
                         'number' => $s['number'],
@@ -71,6 +79,8 @@ class CustomerPaymentController extends Controller
     public function receipt(Request $request, CustomerPayment $payment): View
     {
         abort_unless($payment->user_id === $request->user()->id || $request->user()->hasRole(Role::Owner->value), 403);
+        // A waiting or cancelled QRIS took nothing off the debt: there is nothing to prove.
+        abort_unless($payment->status === CustomerPaymentStatus::Completed, 404);
 
         $payment->load(['customer', 'user', 'entries' => fn ($q) => $q->with('sale')->orderBy('id')]);
 
@@ -89,16 +99,36 @@ class CustomerPaymentController extends Controller
         ]);
     }
 
-    /** @return array<string, mixed>|null */
-    private static function lastPayment(Request $request): ?array
+    /** @return array<string, mixed>|null The QRIS pelunasan this till is waiting on, if any. */
+    private static function pendingPayment(Shift $shift): ?array
     {
-        $id = $request->session()->get('last_payment_id');
-        $payment = is_numeric($id) ? CustomerPayment::query()->with('customer')->where('user_id', $request->user()->id)->find((int) $id) : null;
+        $payment = $shift->customerPayments()->waiting()->with('customer')->latest('id')->first();
 
         return $payment === null ? null : [
             'id' => $payment->id,
             'number' => $payment->number,
             'amount' => $payment->amount,
+            'customer' => $payment->customer->name,
+            'customerId' => $payment->customer_id,
+            'qrUrl' => $payment->qr_url,
+            'qrString' => $payment->qr_string,
+            'expiresAt' => $payment->payment_expires_at?->toIso8601String(),
+        ];
+    }
+
+    /** @return array<string, mixed>|null */
+    private static function lastPayment(Request $request): ?array
+    {
+        $id = $request->session()->get('last_payment_id');
+        $payment = is_numeric($id)
+            ? CustomerPayment::query()->with('customer')->received()->where('user_id', $request->user()->id)->find((int) $id)
+            : null;
+
+        return $payment === null ? null : [
+            'id' => $payment->id,
+            'number' => $payment->number,
+            'amount' => $payment->amount,
+            'method' => $payment->method,
             'customer' => $payment->customer->name,
             'balance' => (int) $payment->entries()->orderByDesc('id')->value('balance_after'),
         ];

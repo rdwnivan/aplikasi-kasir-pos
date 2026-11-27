@@ -1,8 +1,10 @@
-import { Head, useForm } from '@inertiajs/react';
-import { CheckCircle2, HandCoins, Printer, Search } from 'lucide-react';
+import { Head, router, useForm } from '@inertiajs/react';
+import { CheckCircle2, HandCoins, Printer, QrCode, Search } from 'lucide-react';
 import { useState } from 'react';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
+import { QrisDialog } from '@/components/pos/qris-dialog';
+import type { QrisTarget } from '@/components/pos/qris-dialog';
 import { RupiahInput } from '@/components/pos/rupiah-input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -27,6 +29,8 @@ type Debtor = {
     phone: string | null;
     balance: number;
     active: boolean;
+    /** PAY-… number of a QRIS pelunasan waiting at any till: nothing else may be taken meanwhile. */
+    waitingQris: string | null;
     openSales: {
         id: number;
         number: string;
@@ -41,8 +45,15 @@ type LastPayment = {
     id: number;
     number: string;
     amount: number;
+    method: 'cash' | 'qris';
     customer: string;
     balance: number;
+};
+
+type PendingPayment = QrisTarget & {
+    customer: string;
+    customerId: number;
+    qrString: string | null;
 };
 
 type Props = {
@@ -50,17 +61,21 @@ type Props = {
     debtors: Debtor[];
     customerId: number | null;
     lastPayment: LastPayment | null;
+    qrisEnabled: boolean;
+    pendingPayment: PendingPayment | null;
 };
 
 /**
- * Pelunasan kasbon at the till: cash goes into this shift's drawer, oldest kasbon first
- * (DESIGN.md §17).
+ * Pelunasan kasbon at the till: cash goes into this shift's drawer, QRIS through Midtrans
+ * (the debt comes down when it settles), oldest kasbon first (DESIGN.md §17, §18).
  */
 export default function Payments({
     shift,
     debtors,
     customerId,
     lastPayment,
+    qrisEnabled,
+    pendingPayment,
 }: Props) {
     const [search, setSearch] = useState('');
     const [selectedId, setSelectedId] = useState<number | null>(customerId);
@@ -87,7 +102,7 @@ export default function Payments({
             <div className="flex flex-1 flex-col gap-4 p-4">
                 <PageHeader
                     title="Pelunasan kasbon"
-                    description={`Uang tunai masuk ke laci shift Anda (kas seharusnya sekarang ${formatRupiah(shift.expectedCash)}${shift.paymentsCount > 0 ? `, termasuk ${shift.paymentsCount} pelunasan ${formatRupiah(shift.paymentsTotal)}` : ''}). Pembayaran menutup kasbon tertua lebih dulu.`}
+                    description={`Uang tunai masuk ke laci shift Anda (kas seharusnya sekarang ${formatRupiah(shift.expectedCash)}${shift.paymentsCount > 0 ? `, termasuk ${shift.paymentsCount} pelunasan tunai ${formatRupiah(shift.paymentsTotal)}` : ''}); QRIS tidak masuk laci${shift.qrisPaymentsCount > 0 ? ` (${shift.qrisPaymentsCount} pelunasan QRIS ${formatRupiah(shift.qrisPaymentsTotal)})` : ''}. Pembayaran menutup kasbon tertua lebih dulu.`}
                 />
 
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
@@ -142,7 +157,11 @@ export default function Payments({
                     </section>
 
                     {selected ? (
-                        <PaymentForm key={selected.id} debtor={selected} />
+                        <PaymentForm
+                            key={selected.id}
+                            debtor={selected}
+                            qrisEnabled={qrisEnabled}
+                        />
                     ) : (
                         <div className="grid place-items-center rounded-xl border border-dashed p-8 text-sm text-muted-foreground">
                             Pilih pelanggan di sebelah kiri.
@@ -150,6 +169,20 @@ export default function Payments({
                     )}
                 </div>
             </div>
+
+            <QrisDialog
+                payment={pendingPayment}
+                onPaid={() => router.reload()}
+                statusUrl={(id) => pos.payments.qris.show.url(id)}
+                cancelUrl={(id) => pos.payments.qris.cancel.url(id)}
+                reloadOnly="pendingPayment"
+                note={
+                    pendingPayment
+                        ? `Pelunasan kasbon ${pendingPayment.customer}`
+                        : undefined
+                }
+                cancelledNote="QRIS kedaluwarsa atau dibatalkan. Utang tidak berubah; terima tunai atau buat QRIS baru."
+            />
 
             <Dialog
                 open={done !== null}
@@ -162,7 +195,8 @@ export default function Payments({
                                 <CheckCircle2 className="size-12 text-emerald-500" />
                                 <DialogTitle>Pelunasan diterima</DialogTitle>
                                 <DialogDescription>
-                                    {done.number} · {done.customer}
+                                    {done.number} · {done.customer} ·{' '}
+                                    {done.method === 'qris' ? 'QRIS' : 'Tunai'}
                                 </DialogDescription>
                             </DialogHeader>
                             <div className="rounded-lg bg-muted p-4 text-center">
@@ -209,10 +243,29 @@ export default function Payments({
     );
 }
 
-function PaymentForm({ debtor }: { debtor: Debtor }) {
+function PaymentForm({
+    debtor,
+    qrisEnabled,
+}: {
+    debtor: Debtor;
+    qrisEnabled: boolean;
+}) {
     const form = useForm({ customer_id: debtor.id, amount: 0, note: '' });
     const amount = form.data.amount;
-    const valid = amount >= 1 && amount <= debtor.balance;
+    const held = debtor.waitingQris !== null;
+    const valid = amount >= 1 && amount <= debtor.balance && !held;
+    const errors = form.errors as Record<string, string | undefined>;
+    const [via, setVia] = useState<'cash' | 'qris'>('cash');
+
+    const startQris = () => {
+        if (valid && !form.processing) {
+            setVia('qris');
+            form.post(pos.payments.qris.store.url(), {
+                preserveScroll: true,
+                onSuccess: () => form.reset('amount', 'note'),
+            });
+        }
+    };
 
     // Where the money would go, oldest first (the server does the same).
     let left = amount;
@@ -229,6 +282,7 @@ function PaymentForm({ debtor }: { debtor: Debtor }) {
             onSubmit={(e) => {
                 e.preventDefault();
                 if (valid && !form.processing) {
+                    setVia('cash');
                     form.post(pos.payments.store.url(), {
                         preserveScroll: true,
                         onSuccess: () => form.reset('amount', 'note'),
@@ -290,7 +344,7 @@ function PaymentForm({ debtor }: { debtor: Debtor }) {
             </ul>
 
             <div className="grid gap-2">
-                <Label htmlFor="payment-amount">Jumlah dibayar (tunai)</Label>
+                <Label htmlFor="payment-amount">Jumlah dibayar</Label>
                 <RupiahInput
                     id="payment-amount"
                     className="h-12 text-xl"
@@ -315,12 +369,15 @@ function PaymentForm({ debtor }: { debtor: Debtor }) {
                         sejumlah utangnya saja; kembalikan sisanya.
                     </p>
                 )}
+                {held && (
+                    <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                        QRIS {debtor.waitingQris} menunggu pembayaran.
+                        Selesaikan atau batalkan dulu sebelum menerima pelunasan
+                        lain.
+                    </p>
+                )}
                 <InputError
-                    message={
-                        form.errors.amount ??
-                        (form.errors as Record<string, string | undefined>)
-                            .shift
-                    }
+                    message={errors.amount ?? errors.payment ?? errors.shift}
                 />
             </div>
             <div className="grid gap-2">
@@ -332,17 +389,35 @@ function PaymentForm({ debtor }: { debtor: Debtor }) {
                 />
             </div>
 
-            <Button
-                type="submit"
-                size="lg"
-                className="w-full"
-                disabled={!valid || form.processing}
-            >
-                <HandCoins />
-                {form.processing
-                    ? 'Memproses…'
-                    : `Terima ${valid ? formatRupiah(amount) : ''}`.trim()}
-            </Button>
+            <div className="grid gap-2 xl:grid-cols-2">
+                <Button
+                    type="submit"
+                    size="lg"
+                    disabled={!valid || form.processing}
+                >
+                    <HandCoins />
+                    {form.processing && via === 'cash'
+                        ? 'Memproses…'
+                        : `Terima tunai ${valid ? formatRupiah(amount) : ''}`.trim()}
+                </Button>
+                <Button
+                    type="button"
+                    size="lg"
+                    variant="outline"
+                    disabled={!valid || !qrisEnabled || form.processing}
+                    title={qrisEnabled ? undefined : 'QRIS belum aktif'}
+                    onClick={startQris}
+                >
+                    <QrCode />
+                    {form.processing && via === 'qris'
+                        ? 'Membuat QRIS…'
+                        : `QRIS ${valid ? formatRupiah(amount) : ''}`.trim()}
+                </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+                Bayar sebagian tunai dan sebagian QRIS? Terima tunai dulu, lalu
+                QRIS untuk sisanya.
+            </p>
         </form>
     );
 }

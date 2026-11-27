@@ -130,7 +130,7 @@ final class ReportTables
         return (new ReportDocument(
             'Rekap kasir & shift',
             self::period($range),
-            'Selisih = uang dihitung − kas seharusnya (negatif berarti kurang).',
+            'Selisih = uang dihitung − kas seharusnya (negatif berarti kurang). Pelunasan QRIS tidak masuk laci.',
             self::filename('rekap-kasir', $range),
             landscape: true,
         ))
@@ -143,11 +143,12 @@ final class ReportTables
                     ['label' => 'Tunai', 'format' => Spreadsheet::RUPIAH],
                     ['label' => 'QRIS', 'format' => Spreadsheet::RUPIAH],
                     ['label' => 'Kasbon', 'format' => Spreadsheet::RUPIAH],
-                    ['label' => 'Pelunasan', 'format' => Spreadsheet::RUPIAH],
+                    ['label' => 'Pelunasan tunai', 'format' => Spreadsheet::RUPIAH],
+                    ['label' => 'Pelunasan QRIS', 'format' => Spreadsheet::RUPIAH],
                     ['label' => 'Retur', 'format' => Spreadsheet::RUPIAH],
                     ['label' => 'Total selisih', 'format' => Spreadsheet::RUPIAH],
                 ],
-                array_map(fn (array $c) => [$c['cashier'], $c['shifts'], $c['transactions'], $c['cashSales'], $c['qrisSales'], $c['creditSales'], $c['payments'], -$c['refunds'], $c['difference']], $report['cashiers']),
+                array_map(fn (array $c) => [$c['cashier'], $c['shifts'], $c['transactions'], $c['cashSales'], $c['qrisSales'], $c['creditSales'], $c['payments'], $c['qrisPayments'], -$c['refunds'], $c['difference']], $report['cashiers']),
             )
             ->sheet(
                 'Per shift',
@@ -160,7 +161,8 @@ final class ReportTables
                     ['label' => 'Tunai', 'format' => Spreadsheet::RUPIAH],
                     ['label' => 'QRIS', 'format' => Spreadsheet::RUPIAH],
                     ['label' => 'Kasbon', 'format' => Spreadsheet::RUPIAH],
-                    ['label' => 'Pelunasan', 'format' => Spreadsheet::RUPIAH],
+                    ['label' => 'Pelunasan tunai', 'format' => Spreadsheet::RUPIAH],
+                    ['label' => 'Pelunasan QRIS', 'format' => Spreadsheet::RUPIAH],
                     ['label' => 'Retur', 'format' => Spreadsheet::RUPIAH],
                     ['label' => 'Kas seharusnya', 'format' => Spreadsheet::RUPIAH, 'width' => 16],
                     ['label' => 'Dihitung', 'format' => Spreadsheet::RUPIAH],
@@ -170,7 +172,7 @@ final class ReportTables
                 ],
                 array_map(fn (array $s) => [
                     $s['cashier'], $time($s['openedAt']), $time($s['closedAt']), $s['transactions'], $s['openingCash'],
-                    $s['cashSales'], $s['qrisSales'], $s['creditSales'], $s['payments'], -$s['refunds'], $s['expectedCash'], $s['countedCash'], $s['difference'],
+                    $s['cashSales'], $s['qrisSales'], $s['creditSales'], $s['payments'], $s['qrisPayments'], -$s['refunds'], $s['expectedCash'], $s['countedCash'], $s['difference'],
                     $s['closedBy'] ?? '', $s['closeReason'] ?? '',
                 ], $report['shifts']),
             );

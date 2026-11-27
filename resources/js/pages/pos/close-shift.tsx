@@ -59,7 +59,7 @@ export default function CloseShift({
                             />
                             {shift.paymentsCount > 0 && (
                                 <Row
-                                    label={`Pelunasan kasbon (${shift.paymentsCount})`}
+                                    label={`Pelunasan kasbon tunai (${shift.paymentsCount})`}
                                     value={formatRupiah(shift.paymentsTotal)}
                                 />
                             )}
@@ -76,6 +76,13 @@ export default function CloseShift({
                                 strong
                             />
                         </dl>
+                        {shift.qrisPaymentsCount > 0 && (
+                            <p className="-mt-3 text-xs text-muted-foreground">
+                                Pelunasan QRIS ({shift.qrisPaymentsCount}){' '}
+                                {formatRupiah(shift.qrisPaymentsTotal)} — tidak
+                                masuk laci.
+                            </p>
+                        )}
 
                         {heldCount > 0 && (
                             <Alert variant="destructive">

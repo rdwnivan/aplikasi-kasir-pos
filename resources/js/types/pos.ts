@@ -43,6 +43,9 @@ export type ShiftSummary = {
     /** Kasbon paid off in cash into this drawer. */
     paymentsCount: number;
     paymentsTotal: number;
+    /** Kasbon paid off by QRIS on this shift: not in the drawer (DESIGN.md §18). */
+    qrisPaymentsCount: number;
+    qrisPaymentsTotal: number;
     expectedCash: number;
 };
 

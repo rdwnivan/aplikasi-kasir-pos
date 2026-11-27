@@ -47,9 +47,13 @@
     <hr>
     <table class="muted">
         <tr><td>No</td><td class="r">{{ $payment->number }}</td></tr>
-        <tr><td>Tgl</td><td class="r">{{ $payment->created_at?->translatedFormat('d M Y H:i') }}</td></tr>
+        <tr><td>Tgl</td><td class="r">{{ $payment->receivedAt()?->translatedFormat('d M Y H:i') }}</td></tr>
         <tr><td>Kasir</td><td class="r">{{ $payment->user->name }}</td></tr>
         <tr><td>Pelanggan</td><td class="r">{{ $payment->customer->name }}</td></tr>
+        <tr><td>Bayar</td><td class="r">{{ $payment->isQris() ? 'QRIS' : 'Tunai' }}</td></tr>
+        @if ($payment->isQris() && $payment->payment_reference)
+            <tr><td>Ref.</td><td class="r">{{ $payment->payment_reference }}</td></tr>
+        @endif
     </table>
     <hr>
     <table>

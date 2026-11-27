@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers\Webhooks;
 
+use App\Actions\Customers\QrisCustomerPayments;
 use App\Actions\Sales\QrisPayments;
 use App\Enums\PaymentMethod;
 use App\Http\Controllers\Controller;
+use App\Models\CustomerPayment;
 use App\Models\PaymentNotification;
 use App\Models\Sale;
+use App\Services\Documents\DocumentNumber;
 use App\Services\Payments\MidtransClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,7 +23,7 @@ use Illuminate\Http\Request;
  */
 class MidtransWebhookController extends Controller
 {
-    public function __invoke(Request $request, MidtransClient $midtrans, QrisPayments $payments): JsonResponse
+    public function __invoke(Request $request, MidtransClient $midtrans, QrisPayments $payments, QrisCustomerPayments $customerPayments): JsonResponse
     {
         $payload = $request->json()->all();
         $orderId = self::str($payload['order_id'] ?? null);
@@ -50,6 +53,33 @@ class MidtransWebhookController extends Controller
             $log('invalid_signature');
 
             return response()->json(['message' => 'Invalid signature.'], 403);
+        }
+
+        // Pelunasan kasbon by QRIS has its own state machine (DESIGN.md §18); everything else
+        // goes down the sales path below, unchanged.
+        if (str_starts_with($orderId, DocumentNumber::CUSTOMER_PAYMENT.'-')) {
+            $payment = CustomerPayment::query()->where('number', $orderId)->where('method', CustomerPayment::QRIS)->first();
+
+            if ($payment === null) {
+                $log('unknown_order');
+
+                return response()->json(['message' => 'Unknown order, ignored.']);
+            }
+
+            if ((int) round((float) $grossAmount) !== $payment->amount) {
+                $log('amount_mismatch');
+
+                return response()->json(['message' => 'Amount does not match, ignored.']);
+            }
+
+            $result = $customerPayments->apply(
+                $payment,
+                $transactionStatus,
+                isset($payload['fraud_status']) ? self::str($payload['fraud_status']) : null,
+            );
+            $log($result);
+
+            return response()->json(['message' => 'OK', 'result' => $result]);
         }
 
         $sale = Sale::query()->where('number', $orderId)->whereIn('payment_method', PaymentMethod::qrisMethods())->first();

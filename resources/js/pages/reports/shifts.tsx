@@ -28,6 +28,7 @@ type ShiftRow = {
     qrisSales: number;
     creditSales: number;
     payments: number;
+    qrisPayments: number;
     refunds: number;
     expectedCash: number;
     countedCash: number | null;
@@ -45,6 +46,7 @@ type CashierRow = {
     qrisSales: number;
     creditSales: number;
     payments: number;
+    qrisPayments: number;
     refunds: number;
     difference: number | null;
 };
@@ -118,7 +120,10 @@ export default function ShiftsReport({
                                         Kasbon
                                     </TableHead>
                                     <TableHead className="text-right">
-                                        Pelunasan
+                                        Pelunasan tunai
+                                    </TableHead>
+                                    <TableHead className="text-right">
+                                        Pelunasan QRIS
                                     </TableHead>
                                     <TableHead className="text-right">
                                         Retur
@@ -132,7 +137,7 @@ export default function ShiftsReport({
                                 {report.cashiers.length === 0 && (
                                     <TableRow>
                                         <TableCell
-                                            colSpan={9}
+                                            colSpan={10}
                                             className="py-8 text-center text-muted-foreground"
                                         >
                                             Tidak ada shift di rentang tanggal
@@ -165,6 +170,11 @@ export default function ShiftsReport({
                                         <TableCell className="text-right whitespace-nowrap tabular-nums">
                                             {c.payments
                                                 ? formatRupiah(c.payments)
+                                                : '–'}
+                                        </TableCell>
+                                        <TableCell className="text-right whitespace-nowrap tabular-nums">
+                                            {c.qrisPayments
+                                                ? formatRupiah(c.qrisPayments)
                                                 : '–'}
                                         </TableCell>
                                         <TableCell className="text-right whitespace-nowrap tabular-nums">
@@ -207,7 +217,10 @@ export default function ShiftsReport({
                                         Kasbon
                                     </TableHead>
                                     <TableHead className="text-right">
-                                        Pelunasan
+                                        Pelunasan tunai
+                                    </TableHead>
+                                    <TableHead className="text-right">
+                                        Pelunasan QRIS
                                     </TableHead>
                                     <TableHead className="text-right">
                                         Retur
@@ -292,6 +305,11 @@ export default function ShiftsReport({
                                         <TableCell className="text-right whitespace-nowrap tabular-nums">
                                             {s.payments
                                                 ? formatRupiah(s.payments)
+                                                : '–'}
+                                        </TableCell>
+                                        <TableCell className="text-right whitespace-nowrap tabular-nums">
+                                            {s.qrisPayments
+                                                ? formatRupiah(s.qrisPayments)
                                                 : '–'}
                                         </TableCell>
                                         <TableCell className="text-right whitespace-nowrap tabular-nums">

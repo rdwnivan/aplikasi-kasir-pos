@@ -68,6 +68,8 @@ type Entry = {
         kind: 'sale' | 'payment' | 'return';
         id: number;
         number: string;
+        /** Payments only: 'cash' or 'qris' (DESIGN.md §18). */
+        method?: 'cash' | 'qris';
     } | null;
     note: string | null;
     user: string | null;
@@ -79,6 +81,8 @@ type Props = {
     customer: Customer;
     openSales: OpenSale[];
     entries: Entry[];
+    /** A QRIS pelunasan waiting: other payments and write-offs are refused until it ends. */
+    waitingQris: { number: string; amount: number; cashier: string } | null;
     canManage: boolean;
 };
 
@@ -87,6 +91,7 @@ export default function CustomerShow({
     customer,
     openSales,
     entries,
+    waitingQris,
     canManage,
 }: Props) {
     const [editing, setEditing] = useState(false);
@@ -153,6 +158,15 @@ export default function CustomerShow({
                     <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
                         Pelanggan ini nonaktif: tidak bisa kasbon lagi, tetapi
                         utangnya tetap bisa dilunasi.
+                    </p>
+                )}
+                {waitingQris && (
+                    <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                        QRIS pelunasan {waitingQris.number} (
+                        {formatRupiah(waitingQris.amount)}, kasir{' '}
+                        {waitingQris.cashier}) menunggu pembayaran. Sampai QR
+                        itu lunas, dibatalkan, atau kedaluwarsa, pelunasan lain,
+                        hapus utang, dan retur kasbon pelanggan ini ditolak.
                     </p>
                 )}
 
@@ -371,6 +385,7 @@ function EntryDocument({ entry }: { entry: Entry }) {
                     {doc.number} <Printer className="size-3" />
                 </a>{' '}
                 <span className="text-xs text-muted-foreground">
+                    {doc.method === 'qris' ? 'QRIS · ' : 'Tunai · '}
                     untuk {entry.saleNumber}
                 </span>
             </>

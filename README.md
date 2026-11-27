@@ -18,7 +18,7 @@ _Cash checkout from scan to change (animated PNG). All screenshots use the 30-da
 
   <img src="docs/screenshots/detail-retur.jpg" alt="Transaction detail with a processed return" width="70%">
 
-- **Customer credit (kasbon):** regulars buy on credit up to a per-customer limit, with an optional cash down payment. Cashiers can add a customer from the payment dialog (with the store's default limit); only the owner changes limits. Customers pay off part or all at any till, in cash into that cashier's drawer, oldest kasbon first, with a printed payment receipt. A return on a kasbon sale comes off the debt before any cash goes out. The owner sees every customer's kasbon card, writes off bad debt with a reason, and gets an aged receivables report (0–30 / 31–60 / 61–90 / > 90 days) with Excel and PDF export. Debt is an append-only ledger like stock (`php artisan receivables:rebuild`).
+- **Customer credit (kasbon):** regulars buy on credit up to a per-customer limit, with an optional cash down payment. Cashiers can add a customer from the payment dialog (with the store's default limit); only the owner changes limits. Customers pay off part or all at any till, in cash into that cashier's drawer or **by QRIS** (the debt comes down only when Midtrans settles it, and nothing else may touch that customer's debt while the QR waits), oldest kasbon first, with a printed payment receipt. A return on a kasbon sale comes off the debt before any cash goes out. The owner sees every customer's kasbon card, writes off bad debt with a reason, and gets an aged receivables report (0–30 / 31–60 / 61–90 / > 90 days) with Excel and PDF export. Debt is an append-only ledger like stock (`php artisan receivables:rebuild`).
 - **Inventory:** products with tiered units, categories, units, suppliers, goods receipts, stock opname (draft → post), stock card per product, low-stock badge.
 
   <p><img src="docs/screenshots/penerimaan-barang.jpg" alt="Goods receipt form" width="49%"> <img src="docs/screenshots/kartu-stok.jpg" alt="Stock card for one product" width="49%"></p>
@@ -47,7 +47,7 @@ _Cash checkout from scan to change (animated PNG). All screenshots use the 30-da
 - `products.stock_on_hand` / `avg_cost` are a **cache** updated in the same transaction by `App\Services\Inventory\StockLedger`, under `SELECT … FOR UPDATE` on the product row, locking products in id order so concurrent tills cannot oversell or deadlock.
 - HPP uses the **moving average**: incoming purchases and returns re-weight it; sales and opname go out at the current average. Money is integer Rupiah; HPP is `decimal(15,4)` with bcmath.
 - `php artisan stock:rebuild [--fix]` replays the ledger and compares it with the cache.
-- QRIS sales wait as `pending_payment` without touching stock; the signed Midtrans webhook (or the till's status polling) settles them idempotently, and only then is stock issued.
+- QRIS sales wait as `pending_payment` without touching stock; the signed Midtrans webhook (or the till's status polling) settles them idempotently, and only then is stock issued. QRIS pelunasan (`PAY-…` order ids) has its own small state machine on the same webhook: the debt comes down at settlement, and the drawer counts only cash pelunasan.
 - Gross profit is reported **excluding PPN** (PPN is collected for the state, not income), net of returns at their original HPP. Kasbon counts as a sale when the goods leave, not when it is paid.
 - Customer debt follows the same pattern: `customer_ledger_entries` is append-only (every row belongs to one kasbon sale, so what is owed per sale and its age come straight from the ledger), `customers.balance` is a cache written only by `App\Services\Receivables\CustomerLedger` under a row lock on the customer, and `php artisan receivables:rebuild [--fix]` checks it.
 
@@ -113,10 +113,10 @@ npm run check && npm run types:check
 
 ## Roadmap
 
-Batches and expiry dates, paying off kasbon by QRIS, multi-branch with stock transfers, offline PWA, direct ESC/POS printing (see `docs/DESIGN.md` §6).
+Batches and expiry dates, multi-branch with stock transfers, offline PWA, direct ESC/POS printing (see `docs/DESIGN.md` §6).
 
 ---
 
 ## Ringkasan (Bahasa Indonesia)
 
-Aplikasi kasir dan manajemen stok untuk satu toko: layar kasir dengan barcode, satuan bertingkat, diskon, tahan transaksi, pembayaran tunai, QRIS (Midtrans), dan campuran tunai + QRIS, kasbon pelanggan (batas kredit per pelanggan, uang muka, pelunasan sebagian di kasir mana pun, laporan umur piutang), struk thermal, shift dan rekap kas (owner bisa menutup shift kasir lain), retur dengan PIN owner, pesanan pembelian (PO) dengan penerimaan bertahap, penerimaan barang, stok opname, kartu stok, peringatan stok minimum, laporan penjualan dan laba kotor, produk terlaris, nilai persediaan, rekap kasir, ekspor Excel dan PDF, serta kelola pengguna oleh owner (tambah akun, ubah role, nonaktifkan, reset kata sandi, PIN, serta 2FA/passkey, dengan riwayat perubahan akun). Stok dicatat di buku besar `stock_movements` dengan HPP moving average; PPN 12% dengan DPP 11/12. Jalankan dengan `php artisan migrate --seed` (atau Sail), lalu masuk dengan akun demo di atas.
+Aplikasi kasir dan manajemen stok untuk satu toko: layar kasir dengan barcode, satuan bertingkat, diskon, tahan transaksi, pembayaran tunai, QRIS (Midtrans), dan campuran tunai + QRIS, kasbon pelanggan (batas kredit per pelanggan, uang muka, pelunasan sebagian di kasir mana pun secara tunai atau QRIS, laporan umur piutang), struk thermal, shift dan rekap kas (owner bisa menutup shift kasir lain), retur dengan PIN owner, pesanan pembelian (PO) dengan penerimaan bertahap, penerimaan barang, stok opname, kartu stok, peringatan stok minimum, laporan penjualan dan laba kotor, produk terlaris, nilai persediaan, rekap kasir, ekspor Excel dan PDF, serta kelola pengguna oleh owner (tambah akun, ubah role, nonaktifkan, reset kata sandi, PIN, serta 2FA/passkey, dengan riwayat perubahan akun). Stok dicatat di buku besar `stock_movements` dengan HPP moving average; PPN 12% dengan DPP 11/12. Jalankan dengan `php artisan migrate --seed` (atau Sail), lalu masuk dengan akun demo di atas.

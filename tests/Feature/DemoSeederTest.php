@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\CustomerPaymentStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\Role;
 use App\Models\Customer;
@@ -14,6 +15,7 @@ use App\Reports\Receivables;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoUserSeeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 
 it('seeds demo accounts with roles and an opening stock that matches the ledger', function () {
     $this->seed(DatabaseSeeder::class);
@@ -85,5 +87,19 @@ it('seeds kasbon, pelunasan and a kasbon return through the real actions', funct
         ->and(collect($report['rows'])->firstWhere('customer', 'Pak Darto')['age31to60'] ?? 0)->toBeGreaterThan(0);
 
     $this->artisan('stock:rebuild')->assertSuccessful();
+    $this->artisan('receivables:rebuild')->assertSuccessful();
+});
+
+it('seeds settled QRIS pelunasan through the real actions, without calling Midtrans', function () {
+    config(['pos.demo_sales_history' => true, 'services.midtrans.server_key' => 'real-key-kept']);
+    Http::preventStrayRequests();
+    $this->seed(DatabaseSeeder::class);
+
+    $qris = CustomerPayment::query()->where('method', CustomerPayment::QRIS)->get();
+    expect($qris)->not->toBeEmpty()
+        ->and($qris->every(fn (CustomerPayment $p) => $p->status === CustomerPaymentStatus::Completed && $p->entries()->exists()))->toBeTrue()
+        ->and(CustomerPayment::query()->where('method', CustomerPayment::CASH)->count())->toBeGreaterThan(0)
+        ->and(config('services.midtrans.server_key'))->toBe('real-key-kept');
+
     $this->artisan('receivables:rebuild')->assertSuccessful();
 });

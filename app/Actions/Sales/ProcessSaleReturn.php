@@ -2,6 +2,7 @@
 
 namespace App\Actions\Sales;
 
+use App\Actions\Customers\QrisCustomerPayments;
 use App\Enums\SaleStatus;
 use App\Enums\StockMovementType;
 use App\Models\Sale;
@@ -40,6 +41,7 @@ final class ProcessSaleReturn
         private readonly StockLedger $ledger,
         private readonly DocumentNumber $numbers,
         private readonly CustomerLedger $customers,
+        private readonly QrisCustomerPayments $qris,
     ) {}
 
     /**
@@ -61,11 +63,19 @@ final class ProcessSaleReturn
         $shift = $this->openShiftOf($actor);
         $approver = $this->ownerPin->approve($actor, $ownerPin);
 
+        if ($sale->customer_id !== null) {
+            $this->qris->clearExpired($sale->customer()->firstOrFail());
+        }
+
         return DB::transaction(function () use ($actor, $sale, $quantities, $reason, $shift, $approver) {
             $this->lockOpenShift($shift);
 
             // A kasbon sale's return comes off the debt first. Lock order: shift → customer → sale.
             $customer = $sale->customer_id === null ? null : $this->customers->lock($sale->customer()->firstOrFail());
+            // Nothing else may take the debt down while a QRIS pelunasan waits (DESIGN.md §18.2).
+            if ($customer !== null) {
+                QrisCustomerPayments::ensureNoneWaiting($customer);
+            }
 
             // One return at a time per sale, so two terminals cannot both refund the last unit.
             /** @var Sale $locked */
