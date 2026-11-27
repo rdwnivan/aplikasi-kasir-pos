@@ -3,6 +3,7 @@
 namespace App\Exports;
 
 use App\Reports\InventoryValuation;
+use App\Reports\Receivables;
 use App\Reports\SalesSummary;
 use App\Reports\ShiftRecap;
 use App\Reports\TopProducts;
@@ -36,6 +37,7 @@ final class ReportTables
                 ['label' => 'Penjualan (incl. PPN)', 'format' => Spreadsheet::RUPIAH, 'width' => 18],
                 ['label' => 'Tunai', 'format' => Spreadsheet::RUPIAH],
                 ['label' => 'QRIS', 'format' => Spreadsheet::RUPIAH],
+                ['label' => 'Kasbon', 'format' => Spreadsheet::RUPIAH],
                 ['label' => 'Retur', 'format' => Spreadsheet::RUPIAH],
                 ['label' => 'PPN', 'format' => Spreadsheet::RUPIAH],
                 ['label' => 'Penjualan bersih', 'format' => Spreadsheet::RUPIAH, 'width' => 16],
@@ -44,10 +46,10 @@ final class ReportTables
                 ['label' => 'Margin', 'format' => Spreadsheet::PERCENT, 'width' => 9],
             ],
             array_map(fn (array $r) => [
-                $r['period'], $r['transactions'], $r['gross'], $r['cash'], $r['qris'], -$r['refunds'],
+                $r['period'], $r['transactions'], $r['gross'], $r['cash'], $r['qris'], $r['credit'], -$r['refunds'],
                 $r['tax'], $r['netSales'], $r['cogs'], $r['grossProfit'], $r['margin'],
             ], $report['rows']),
-            ['Total', $t['transactions'], $t['gross'], $t['cash'], $t['qris'], -$t['refunds'], $t['tax'], $t['netSales'], $t['cogs'], $t['grossProfit'], $t['margin']],
+            ['Total', $t['transactions'], $t['gross'], $t['cash'], $t['qris'], $t['credit'], -$t['refunds'], $t['tax'], $t['netSales'], $t['cogs'], $t['grossProfit'], $t['margin']],
         );
     }
 
@@ -140,10 +142,12 @@ final class ReportTables
                     ['label' => 'Transaksi', 'format' => Spreadsheet::NUMBER, 'width' => 10],
                     ['label' => 'Tunai', 'format' => Spreadsheet::RUPIAH],
                     ['label' => 'QRIS', 'format' => Spreadsheet::RUPIAH],
+                    ['label' => 'Kasbon', 'format' => Spreadsheet::RUPIAH],
+                    ['label' => 'Pelunasan', 'format' => Spreadsheet::RUPIAH],
                     ['label' => 'Retur', 'format' => Spreadsheet::RUPIAH],
                     ['label' => 'Total selisih', 'format' => Spreadsheet::RUPIAH],
                 ],
-                array_map(fn (array $c) => [$c['cashier'], $c['shifts'], $c['transactions'], $c['cashSales'], $c['qrisSales'], -$c['refunds'], $c['difference']], $report['cashiers']),
+                array_map(fn (array $c) => [$c['cashier'], $c['shifts'], $c['transactions'], $c['cashSales'], $c['qrisSales'], $c['creditSales'], $c['payments'], -$c['refunds'], $c['difference']], $report['cashiers']),
             )
             ->sheet(
                 'Per shift',
@@ -155,6 +159,8 @@ final class ReportTables
                     ['label' => 'Modal awal', 'format' => Spreadsheet::RUPIAH],
                     ['label' => 'Tunai', 'format' => Spreadsheet::RUPIAH],
                     ['label' => 'QRIS', 'format' => Spreadsheet::RUPIAH],
+                    ['label' => 'Kasbon', 'format' => Spreadsheet::RUPIAH],
+                    ['label' => 'Pelunasan', 'format' => Spreadsheet::RUPIAH],
                     ['label' => 'Retur', 'format' => Spreadsheet::RUPIAH],
                     ['label' => 'Kas seharusnya', 'format' => Spreadsheet::RUPIAH, 'width' => 16],
                     ['label' => 'Dihitung', 'format' => Spreadsheet::RUPIAH],
@@ -164,10 +170,45 @@ final class ReportTables
                 ],
                 array_map(fn (array $s) => [
                     $s['cashier'], $time($s['openedAt']), $time($s['closedAt']), $s['transactions'], $s['openingCash'],
-                    $s['cashSales'], $s['qrisSales'], -$s['refunds'], $s['expectedCash'], $s['countedCash'], $s['difference'],
+                    $s['cashSales'], $s['qrisSales'], $s['creditSales'], $s['payments'], -$s['refunds'], $s['expectedCash'], $s['countedCash'], $s['difference'],
                     $s['closedBy'] ?? '', $s['closeReason'] ?? '',
                 ], $report['shifts']),
             );
+    }
+
+    /** Kasbon owed per customer as of now, with its age (DESIGN.md §17). */
+    public static function receivables(): ReportDocument
+    {
+        $report = Receivables::build();
+        $t = $report['totals'];
+        $asOf = CarbonImmutable::now(DateRange::TIMEZONE);
+        $time = fn (?string $iso) => $iso === null ? '' : CarbonImmutable::parse($iso)->setTimezone(DateRange::TIMEZONE)->format('Y-m-d H:i');
+
+        return (new ReportDocument(
+            'Laporan piutang (kasbon)',
+            'Per '.$asOf->translatedFormat('j M Y H.i').' WIB',
+            'Umur dihitung dari tanggal setiap kasbon yang belum lunas; pelunasan menutup kasbon tertua lebih dulu.',
+            'laporan-piutang-'.$asOf->format('Y-m-d'),
+        ))->sheet(
+            'Piutang',
+            [
+                ['label' => 'Pelanggan', 'width' => 22],
+                ['label' => 'No. HP', 'width' => 14],
+                ['label' => 'Utang', 'format' => Spreadsheet::RUPIAH],
+                ['label' => '0–30 hari', 'format' => Spreadsheet::RUPIAH],
+                ['label' => '31–60 hari', 'format' => Spreadsheet::RUPIAH],
+                ['label' => '61–90 hari', 'format' => Spreadsheet::RUPIAH],
+                ['label' => '> 90 hari', 'format' => Spreadsheet::RUPIAH],
+                ['label' => 'Kasbon tertua', 'kind' => 'datetime', 'width' => 16],
+                ['label' => 'Pelunasan terakhir', 'kind' => 'datetime', 'width' => 16],
+                ['label' => 'Batas kredit', 'format' => Spreadsheet::RUPIAH],
+            ],
+            array_map(fn (array $r) => [
+                $r['customer'], $r['phone'] ?? '', $r['balance'], $r['age0to30'], $r['age31to60'], $r['age61to90'], $r['age90plus'],
+                $time($r['oldestAt']), $time($r['lastPaymentAt']), $r['creditLimit'],
+            ], $report['rows']),
+            ['Total', '', $t['balance'], $t['age0to30'], $t['age31to60'], $t['age61to90'], $t['age90plus'], '', '', ''],
+        );
     }
 
     private static function period(DateRange $range): string

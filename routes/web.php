@@ -20,3 +20,4 @@ require __DIR__.'/pos.php';
 require __DIR__.'/inventory.php';
 require __DIR__.'/reports.php';
 require __DIR__.'/users.php';
+require __DIR__.'/customers.php';

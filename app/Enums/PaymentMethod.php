@@ -8,6 +8,8 @@ enum PaymentMethod: string
     case Qris = 'qris';
     /** Part cash, the rest by QRIS (DESIGN.md §11). */
     case Split = 'split';
+    /** Kasbon: an optional cash down payment, the rest owed by the customer (DESIGN.md §17). */
+    case Credit = 'credit';
 
     public function label(): string
     {
@@ -15,18 +17,25 @@ enum PaymentMethod: string
             self::Cash => 'Tunai',
             self::Qris => 'QRIS',
             self::Split => 'Tunai + QRIS',
+            self::Credit => 'Kasbon',
         };
     }
 
     /** Paid (at least partly) through Midtrans, so it goes through the QRIS state machine. */
     public function usesQris(): bool
     {
-        return $this !== self::Cash;
+        return in_array($this, self::qrisMethods(), true);
     }
 
     /** @return list<self> */
     public static function qrisMethods(): array
     {
         return [self::Qris, self::Split];
+    }
+
+    /** @return list<self> Methods that put some cash into the drawer at checkout. */
+    public static function cashMethods(): array
+    {
+        return [self::Cash, self::Split, self::Credit];
     }
 }

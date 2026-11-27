@@ -32,15 +32,23 @@ final class ShiftRecap
             ->selectRaw('shift_id, COUNT(*) AS transactions')
             ->selectRaw('SUM('.Sql::cashPart().') AS cash')
             ->selectRaw('SUM('.Sql::qrisPart().') AS qris')
+            ->selectRaw('SUM('.Sql::creditPart().') AS credit')
             ->get()
             ->keyBy('shift_id');
 
+        // Cash paid out; the part of a kasbon return that came off the debt is not cash.
         $refunds = DB::table('sale_returns')
             ->whereIn('shift_id', $ids)
             ->groupBy('shift_id')
-            ->selectRaw('shift_id, COUNT(*) AS returns, SUM(total) AS refunds')
+            ->selectRaw('shift_id, COUNT(*) AS returns, SUM('.Sql::cashRefund().') AS refunds')
             ->get()
             ->keyBy('shift_id');
+
+        $payments = DB::table('customer_payments')
+            ->whereIn('shift_id', $ids)
+            ->groupBy('shift_id')
+            ->selectRaw('shift_id, SUM(amount) AS payments')
+            ->pluck('payments', 'shift_id');
 
         $rows = [];
         $cashiers = [];
@@ -49,6 +57,7 @@ final class ShiftRecap
             $r = $refunds->get($shift->id);
             $cash = Sql::rupiah($s->cash ?? 0);
             $refund = Sql::rupiah($r->refunds ?? 0);
+            $paid = Sql::rupiah($payments->get($shift->id) ?? 0);
 
             $row = [
                 'id' => $shift->id,
@@ -59,8 +68,10 @@ final class ShiftRecap
                 'openingCash' => $shift->opening_cash,
                 'cashSales' => $cash,
                 'qrisSales' => Sql::rupiah($s->qris ?? 0),
+                'creditSales' => Sql::rupiah($s->credit ?? 0),
+                'payments' => $paid,
                 'refunds' => $refund,
-                'expectedCash' => $shift->expected_cash ?? $shift->opening_cash + $cash - $refund,
+                'expectedCash' => $shift->expected_cash ?? $shift->opening_cash + $cash + $paid - $refund,
                 'countedCash' => $shift->counted_cash,
                 'difference' => $shift->cash_difference,
                 // Only when someone other than the cashier closed it (DESIGN.md §13).
@@ -70,11 +81,13 @@ final class ShiftRecap
             $rows[] = $row;
 
             $name = $row['cashier'];
-            $cashiers[$name] ??= ['cashier' => $name, 'shifts' => 0, 'transactions' => 0, 'cashSales' => 0, 'qrisSales' => 0, 'refunds' => 0, 'difference' => null];
+            $cashiers[$name] ??= ['cashier' => $name, 'shifts' => 0, 'transactions' => 0, 'cashSales' => 0, 'qrisSales' => 0, 'creditSales' => 0, 'payments' => 0, 'refunds' => 0, 'difference' => null];
             $cashiers[$name]['shifts']++;
             $cashiers[$name]['transactions'] += $row['transactions'];
             $cashiers[$name]['cashSales'] += $row['cashSales'];
             $cashiers[$name]['qrisSales'] += $row['qrisSales'];
+            $cashiers[$name]['creditSales'] += $row['creditSales'];
+            $cashiers[$name]['payments'] += $row['payments'];
             $cashiers[$name]['refunds'] += $row['refunds'];
             if ($row['difference'] !== null) { // only closed shifts have one
                 $cashiers[$name]['difference'] = ($cashiers[$name]['difference'] ?? 0) + $row['difference'];
@@ -82,7 +95,7 @@ final class ShiftRecap
         }
 
         $cashiers = array_values($cashiers);
-        usort($cashiers, fn (array $a, array $b) => ($b['cashSales'] + $b['qrisSales']) <=> ($a['cashSales'] + $a['qrisSales']));
+        usort($cashiers, fn (array $a, array $b) => ($b['cashSales'] + $b['qrisSales'] + $b['creditSales']) <=> ($a['cashSales'] + $a['qrisSales'] + $a['creditSales']));
 
         return ['shifts' => $rows, 'cashiers' => $cashiers];
     }

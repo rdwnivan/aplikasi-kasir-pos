@@ -1,4 +1,4 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import { Printer, Undo2 } from 'lucide-react';
 import { useState } from 'react';
 import InputError from '@/components/input-error';
@@ -28,6 +28,7 @@ import { useOpenKey } from '@/hooks/use-open-key';
 import { formatDateTime, formatQty } from '@/lib/format';
 import { formatRupiah, roundDiv } from '@/lib/money';
 import { paymentLabels, saleStatusLabels } from '@/lib/sales';
+import customers from '@/routes/customers';
 import pos from '@/routes/pos';
 
 type Item = {
@@ -58,6 +59,10 @@ type Sale = {
     changeAmount: number | null;
     cashAmount: number;
     qrisAmount: number;
+    /** Kasbon (DESIGN.md §17): what was left owing, and what is still owed now. */
+    creditAmount: number;
+    customer: { id: number; name: string } | null;
+    owed: number;
     items: Item[];
     returns: {
         id: number;
@@ -66,6 +71,7 @@ type Sale = {
         user: string;
         approver: string;
         total: number;
+        creditAmount: number;
         reason: string | null;
         items: { name: string; unit: string; qty: number; amount: number }[];
     }[];
@@ -204,7 +210,37 @@ export default function SaleShow({
                             />
                         )}
                         <Line label="Total" value={sale.total} strong />
-                        {sale.paymentMethod === 'split' ? (
+                        {sale.paymentMethod === 'credit' ? (
+                            <>
+                                {sale.cashAmount > 0 && (
+                                    <Line
+                                        label="Uang muka tunai"
+                                        value={sale.cashAmount}
+                                    />
+                                )}
+                                <Line
+                                    label={`Kasbon ${sale.customer?.name ?? ''}`.trim()}
+                                    value={sale.creditAmount}
+                                />
+                                <Line
+                                    label="Sisa utang transaksi ini"
+                                    value={sale.owed}
+                                    strong
+                                />
+                                {sale.customer && (
+                                    <p className="text-right text-xs">
+                                        <Link
+                                            href={customers.show(
+                                                sale.customer.id,
+                                            )}
+                                            className="text-muted-foreground hover:underline"
+                                        >
+                                            Kartu piutang {sale.customer.name}
+                                        </Link>
+                                    </p>
+                                )}
+                            </>
+                        ) : sale.paymentMethod === 'split' ? (
                             <>
                                 <Line
                                     label="Dibayar tunai"
@@ -264,6 +300,16 @@ export default function SaleShow({
                                         disetujui {r.approver}
                                         {r.reason && ` · ${r.reason}`}
                                     </p>
+                                    {r.creditAmount > 0 && (
+                                        <p className="text-xs">
+                                            Mengurangi utang{' '}
+                                            {formatRupiah(r.creditAmount)} ·
+                                            tunai{' '}
+                                            {formatRupiah(
+                                                r.total - r.creditAmount,
+                                            )}
+                                        </p>
+                                    )}
                                     <ul className="mt-2 space-y-0.5">
                                         {r.items.map((i, idx) => (
                                             <li
@@ -362,6 +408,9 @@ function ReturnForm({ sale, onDone }: { sale: Sale; onDone: () => void }) {
         return qty > 0 ? sum + roundDiv(item.paidShare * qty, item.qty) : sum;
     }, 0);
     const chosen = Object.values(form.data.qty).some((q) => q > 0);
+    // Kasbon: the return comes off what is still owed first; only the rest is cash.
+    const offDebt = Math.min(estimate, sale.owed);
+    const cashBack = estimate - offDebt;
 
     return (
         <form
@@ -389,7 +438,9 @@ function ReturnForm({ sale, onDone }: { sale: Sale; onDone: () => void }) {
                 <DialogTitle>Retur {sale.number}</DialogTitle>
                 <DialogDescription>
                     Pilih barang yang dikembalikan. Stok kembali ke gudang dan
-                    uang dikembalikan tunai dari laci shift ini.
+                    {sale.owed > 0
+                        ? ' nilainya mengurangi sisa kasbon lebih dulu; hanya kelebihannya yang dikembalikan tunai dari laci shift ini.'
+                        : ' uang dikembalikan tunai dari laci shift ini.'}
                 </DialogDescription>
             </DialogHeader>
 
@@ -473,12 +524,26 @@ function ReturnForm({ sale, onDone }: { sale: Sale; onDone: () => void }) {
             </div>
 
             <DialogFooter className="items-center sm:justify-between">
-                <p className="text-sm">
-                    Uang kembali ±{' '}
-                    <span className="font-semibold tabular-nums">
-                        {formatRupiah(estimate)}
-                    </span>
-                </p>
+                {sale.owed > 0 ? (
+                    <p className="text-sm">
+                        Mengurangi utang ±{' '}
+                        <span className="font-semibold tabular-nums">
+                            {formatRupiah(offDebt)}
+                        </span>
+                        <br />
+                        Dikembalikan tunai ±{' '}
+                        <span className="font-semibold tabular-nums">
+                            {formatRupiah(cashBack)}
+                        </span>
+                    </p>
+                ) : (
+                    <p className="text-sm">
+                        Uang kembali ±{' '}
+                        <span className="font-semibold tabular-nums">
+                            {formatRupiah(estimate)}
+                        </span>
+                    </p>
+                )}
                 <Button
                     type="submit"
                     disabled={

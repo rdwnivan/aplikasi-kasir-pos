@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\Auth\OwnerPin;
 use App\Services\Documents\DocumentNumber;
 use App\Services\Inventory\StockLedger;
+use App\Services\Receivables\CustomerLedger;
 use App\Support\Apportion;
 use App\Support\Decimal;
 use Illuminate\Support\Facades\DB;
@@ -26,7 +27,9 @@ use Illuminate\Validation\ValidationException;
  *   transaction discount and PPN) is split across lines by line total, and each line's share
  *   is refunded pro rata. Returning a line's last unit refunds exactly what is left of its
  *   share, so returning everything always refunds the sale total to the rupiah.
- * - Cash comes out of the processing user's open shift, which must exist.
+ * - Cash comes out of the processing user's open shift, which must exist. For a kasbon sale
+ *   the return first comes off what is still owed on that sale, and only the rest is paid
+ *   out in cash (sale_returns.credit_amount, DESIGN.md §17.2).
  */
 final class ProcessSaleReturn
 {
@@ -36,6 +39,7 @@ final class ProcessSaleReturn
         private readonly OwnerPin $ownerPin,
         private readonly StockLedger $ledger,
         private readonly DocumentNumber $numbers,
+        private readonly CustomerLedger $customers,
     ) {}
 
     /**
@@ -59,6 +63,9 @@ final class ProcessSaleReturn
 
         return DB::transaction(function () use ($actor, $sale, $quantities, $reason, $shift, $approver) {
             $this->lockOpenShift($shift);
+
+            // A kasbon sale's return comes off the debt first. Lock order: shift → customer → sale.
+            $customer = $sale->customer_id === null ? null : $this->customers->lock($sale->customer()->firstOrFail());
 
             // One return at a time per sale, so two terminals cannot both refund the last unit.
             /** @var Sale $locked */
@@ -150,8 +157,11 @@ final class ProcessSaleReturn
                 $cogsTotal = Decimal::add($cogsTotal, $cogs);
             }
 
+            $creditPart = $customer === null ? 0 : $this->customers->reverse($customer, $locked, $total, $return, $actor);
+
             $return->forceFill([
                 'total' => $total,
+                'credit_amount' => $creditPart,
                 'tax_amount' => $this->taxPart($locked, $total, $return->id),
                 'cogs_total' => Decimal::round($cogsTotal),
             ])->save();

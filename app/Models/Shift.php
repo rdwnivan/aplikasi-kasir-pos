@@ -54,15 +54,16 @@ class Shift extends Model
     }
 
     /**
-     * Cash that should be in the drawer right now: float plus completed cash sales, minus
-     * cash refunded for returns processed in this shift (whatever shift the sale was in).
+     * Cash that should be in the drawer right now: float plus completed cash sales and kasbon
+     * paid off here, minus cash refunded for returns processed in this shift (whatever shift
+     * the sale was in).
      */
     public function expectedCash(): int
     {
-        return $this->opening_cash + $this->cashSalesTotal() - $this->refundsTotal();
+        return $this->opening_cash + $this->cashSalesTotal() + $this->paymentsTotal() - $this->refundsTotal();
     }
 
-    /** Cash taken in: whole cash sales plus the cash part of mixed cash + QRIS sales. */
+    /** Cash taken in: whole cash sales plus the cash part of mixed and kasbon sales. */
     public function cashSalesTotal(): int
     {
         return Sql::rupiah($this->sales()
@@ -70,18 +71,33 @@ class Shift extends Model
             ->sum(DB::raw(Sql::cashPart())));
     }
 
-    /** Completed sales that put cash in the drawer (cash and mixed). */
+    /** Completed sales that (may) put cash in the drawer: cash, mixed, and kasbon with its down payment. */
     public function cashSalesCount(): int
     {
         return $this->sales()
             ->where('status', SaleStatus::Completed)
-            ->whereIn('payment_method', [PaymentMethod::Cash, PaymentMethod::Split])
+            ->whereIn('payment_method', PaymentMethod::cashMethods())
             ->count();
     }
 
+    /** Kasbon given in this shift (the part left owing). */
+    public function creditSalesTotal(): int
+    {
+        return Sql::rupiah($this->sales()
+            ->where('status', SaleStatus::Completed)
+            ->sum(DB::raw(Sql::creditPart())));
+    }
+
+    /** Kasbon paid off in cash into this drawer (DESIGN.md §17). */
+    public function paymentsTotal(): int
+    {
+        return (int) $this->customerPayments()->sum('amount');
+    }
+
+    /** Cash paid out for returns; the part of a return that came off a kasbon debt is not cash. */
     public function refundsTotal(): int
     {
-        return (int) $this->returns()->sum('total');
+        return Sql::rupiah($this->returns()->sum(DB::raw(Sql::cashRefund())));
     }
 
     /** @param Builder<Shift> $query */
@@ -112,5 +128,11 @@ class Shift extends Model
     public function returns(): HasMany
     {
         return $this->hasMany(SaleReturn::class);
+    }
+
+    /** @return HasMany<CustomerPayment, $this> */
+    public function customerPayments(): HasMany
+    {
+        return $this->hasMany(CustomerPayment::class);
     }
 }

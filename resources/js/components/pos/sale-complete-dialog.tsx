@@ -38,7 +38,28 @@ export function SaleCompleteDialog({ sale, onPrint, onClose }: Props) {
                                     {formatRupiah(sale.total)}
                                 </dd>
                             </div>
-                            {sale.method === 'split' ? (
+                            {sale.method === 'credit' ? (
+                                <>
+                                    {sale.cashAmount > 0 && (
+                                        <div className="flex justify-between">
+                                            <dt className="text-muted-foreground">
+                                                Uang muka tunai
+                                            </dt>
+                                            <dd className="tabular-nums">
+                                                {formatRupiah(sale.cashAmount)}
+                                            </dd>
+                                        </div>
+                                    )}
+                                    <div className="flex justify-between">
+                                        <dt className="text-muted-foreground">
+                                            Kasbon
+                                        </dt>
+                                        <dd className="tabular-nums">
+                                            {formatRupiah(sale.creditAmount)}
+                                        </dd>
+                                    </div>
+                                </>
+                            ) : sale.method === 'split' ? (
                                 <>
                                     <div className="flex justify-between">
                                         <dt className="text-muted-foreground">
@@ -70,7 +91,20 @@ export function SaleCompleteDialog({ sale, onPrint, onClose }: Props) {
                                 </div>
                             )}
                         </dl>
-                        {sale.method === 'qris' || sale.method === 'split' ? (
+                        {sale.method === 'credit' ? (
+                            <div className="rounded-lg bg-amber-500/10 p-4 text-center text-sm">
+                                Kasbon {formatRupiah(sale.creditAmount)} atas
+                                nama{' '}
+                                <span className="font-semibold">
+                                    {sale.customer?.name}
+                                </span>
+                                <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums">
+                                    Sisa utang{' '}
+                                    {formatRupiah(sale.customer?.balance ?? 0)}
+                                </div>
+                            </div>
+                        ) : sale.method === 'qris' ||
+                          sale.method === 'split' ? (
                             <div className="rounded-lg bg-emerald-500/10 p-4 text-center text-sm text-emerald-700 dark:text-emerald-400">
                                 Pembayaran QRIS diterima.
                             </div>

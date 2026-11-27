@@ -1,6 +1,8 @@
 <?php
 
 use App\Enums\Role;
+use App\Http\Controllers\Pos\CustomerController;
+use App\Http\Controllers\Pos\CustomerPaymentController;
 use App\Http\Controllers\Pos\HeldSaleController;
 use App\Http\Controllers\Pos\PosController;
 use App\Http\Controllers\Pos\QrisController;
@@ -32,6 +34,12 @@ Route::middleware(['auth', 'verified', 'role:'.Role::Cashier->value.'|'.Role::Ow
         Route::post('qris/{sale}/batal', [QrisController::class, 'cancel'])->name('qris.cancel');
 
         Route::get('struk/{sale}', [ReceiptController::class, 'show'])->name('receipts.show');
+
+        // Kasbon (DESIGN.md §17): add a customer from the payment dialog, and pelunasan.
+        Route::post('pelanggan', [CustomerController::class, 'store'])->name('customers.store');
+        Route::get('pelunasan', [CustomerPaymentController::class, 'create'])->name('payments.create');
+        Route::post('pelunasan', [CustomerPaymentController::class, 'store'])->name('payments.store');
+        Route::get('pelunasan/{payment}/struk', [CustomerPaymentController::class, 'receipt'])->name('payments.receipt');
 
         Route::post('ditahan', [HeldSaleController::class, 'store'])->name('held.store');
         Route::delete('ditahan/{sale}', [HeldSaleController::class, 'destroy'])->name('held.destroy');

@@ -39,10 +39,16 @@ class SaleReturnController extends Controller
 
         $return = $process->handle($user, $sale, $quantities, $data['owner_pin'], $data['reason'] ?? null);
 
-        Inertia::flash('toast', [
-            'type' => 'success',
-            'message' => "Retur {$return->number} dicatat. Kembalikan uang tunai Rp ".Number::format($return->total, locale: 'id').' ke pelanggan.',
-        ]);
+        $cash = $return->cashRefund();
+        $message = "Retur {$return->number} dicatat.";
+        if ($return->credit_amount > 0) {
+            $message .= ' Utang pelanggan berkurang Rp '.Number::format($return->credit_amount, locale: 'id').'.';
+        }
+        if ($cash > 0 || $return->credit_amount === 0) {
+            $message .= ' Kembalikan uang tunai Rp '.Number::format($cash, locale: 'id').' ke pelanggan.';
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => $message]);
 
         return to_route('pos.sales.show', $sale);
     }

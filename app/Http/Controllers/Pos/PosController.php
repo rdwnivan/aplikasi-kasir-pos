@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Pos;
 
+use App\Enums\LedgerEntryType;
 use App\Enums\SaleStatus;
 use App\Http\Controllers\Controller;
+use App\Models\Customer;
 use App\Models\ProductUnit;
 use App\Models\Sale;
 use App\Models\SaleItem;
@@ -43,7 +45,28 @@ class PosController extends Controller
             'lastSale' => fn () => self::lastSale($request),
             'qrisEnabled' => $midtrans->isConfigured(),
             'pendingQris' => self::pendingQris($shift),
+            'customers' => self::customers(),
         ]);
+    }
+
+    /**
+     * Active customers for the kasbon picker, preloaded like the catalogue (a store has tens
+     * to a few hundred regulars). DESIGN.md §17.
+     *
+     * @return list<array{id: int, name: string, phone: string|null, balance: int, creditLimit: int, available: int}>
+     */
+    public static function customers(): array
+    {
+        return array_values(Customer::query()->active()->orderBy('name')->get()
+            ->map(fn (Customer $c) => [
+                'id' => $c->id,
+                'name' => $c->name,
+                'phone' => $c->phone,
+                'balance' => $c->balance,
+                'creditLimit' => $c->credit_limit,
+                'available' => $c->availableCredit(),
+            ])
+            ->all());
     }
 
     /**
@@ -78,6 +101,9 @@ class PosController extends Controller
             'cashSalesTotal' => $shift->cashSalesTotal(),
             'refundsCount' => $shift->returns()->count(),
             'refundsTotal' => $shift->refundsTotal(),
+            'creditSalesTotal' => $shift->creditSalesTotal(),
+            'paymentsCount' => $shift->customerPayments()->count(),
+            'paymentsTotal' => $shift->paymentsTotal(),
             'expectedCash' => $shift->expectedCash(),
         ];
     }
@@ -156,7 +182,26 @@ class PosController extends Controller
             'method' => $sale->payment_method?->value,
             'cashAmount' => $sale->cashPart(),
             'qrisAmount' => $sale->qrisPart(),
+            'creditAmount' => $sale->creditPart(),
+            'customer' => self::creditCustomer($sale),
         ];
+    }
+
+    /**
+     * Who took the kasbon and what they owed right after this sale (the ledger row's
+     * balance_after, so a reprint later shows the same figure).
+     *
+     * @return array{name: string, balance: int}|null
+     */
+    public static function creditCustomer(Sale $sale): ?array
+    {
+        if ($sale->customer_id === null) {
+            return null;
+        }
+
+        $entry = $sale->ledgerEntries()->where('type', LedgerEntryType::Sale)->with('customer')->first();
+
+        return $entry === null ? null : ['name' => $entry->customer->name, 'balance' => $entry->balance_after];
     }
 
     /** @return array<string, mixed>|null The QRIS this till is waiting on, if any. */

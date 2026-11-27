@@ -27,6 +27,7 @@ type Row = {
     gross: number;
     cash: number;
     qris: number;
+    credit: number;
     refunds: number;
     tax: number;
     netSales: number;
@@ -143,6 +144,9 @@ export default function SalesReport({
                                     QRIS
                                 </TableHead>
                                 <TableHead className="text-right">
+                                    Kasbon
+                                </TableHead>
+                                <TableHead className="text-right">
                                     Retur
                                 </TableHead>
                                 <TableHead className="text-right">
@@ -179,6 +183,7 @@ export default function SalesReport({
                                     <Num value={r.gross} />
                                     <Num value={r.cash} />
                                     <Num value={r.qris} />
+                                    <Num value={r.credit} />
                                     <Num value={-r.refunds} />
                                     <Num value={r.tax} />
                                     <Num value={r.netSales} />
@@ -199,6 +204,7 @@ export default function SalesReport({
                                 <Num value={t.gross} />
                                 <Num value={t.cash} />
                                 <Num value={t.qris} />
+                                <Num value={t.credit} />
                                 <Num value={-t.refunds} />
                                 <Num value={t.tax} />
                                 <Num value={t.netSales} />

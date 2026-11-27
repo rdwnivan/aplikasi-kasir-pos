@@ -15,7 +15,8 @@ use Illuminate\Support\Carbon;
  * @property int $shift_id
  * @property int $user_id
  * @property int $approved_by
- * @property int $total Cash refunded, Rupiah.
+ * @property int $total Value returned, Rupiah (reduces sales).
+ * @property int $credit_amount Part taken off the customer's kasbon instead of paid out (DESIGN.md §17).
  * @property int $tax_amount
  * @property string $cogs_total
  * @property string|null $reason
@@ -29,9 +30,16 @@ class SaleReturn extends Model
     {
         return [
             'total' => 'integer',
+            'credit_amount' => 'integer',
             'tax_amount' => 'integer',
             'cogs_total' => 'decimal:4',
         ];
+    }
+
+    /** Cash paid out of the drawer: the return value less what came off a kasbon debt. */
+    public function cashRefund(): int
+    {
+        return $this->total - $this->credit_amount;
     }
 
     /** @return BelongsTo<Sale, $this> */

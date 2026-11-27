@@ -1,5 +1,6 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
+    HandCoins,
     History,
     LayoutGrid,
     LogOut,
@@ -30,6 +31,7 @@ import pos from '@/routes/pos';
 import type {
     CartItem,
     CatalogItem,
+    CreditCustomer,
     DiscountType,
     HeldSale,
     LastSale,
@@ -46,6 +48,7 @@ type Props = {
     lastSale: LastSale | null;
     qrisEnabled: boolean;
     pendingQris: PendingQris | null;
+    customers: CreditCustomer[];
 };
 
 type Discount = { type: DiscountType | null; value: number };
@@ -68,6 +71,7 @@ export default function PosIndex({
     lastSale,
     qrisEnabled,
     pendingQris,
+    customers,
 }: Props) {
     const { auth } = usePage().props;
     const storageKey = `pos-cart-${shift.id}`;
@@ -256,6 +260,29 @@ export default function PosIndex({
         router.post(
             pos.sales.store.url(),
             { ...payload(), paid_amount: paid },
+            {
+                preserveScroll: true,
+                onStart: () => setProcessing(true),
+                onFinish: () => setProcessing(false),
+                onSuccess: () => {
+                    setDialog(null);
+                    resetCart();
+                },
+                onError: (errors) => setPayError(firstError(errors)),
+            },
+        );
+    }
+
+    function submitCredit(customerId: number, downPayment: number) {
+        setPayError(undefined);
+        router.post(
+            pos.sales.store.url(),
+            {
+                ...payload(),
+                payment_method: 'credit',
+                customer_id: customerId,
+                paid_amount: downPayment,
+            },
             {
                 preserveScroll: true,
                 onStart: () => setProcessing(true),
@@ -500,6 +527,15 @@ export default function PosIndex({
                     </Button>
                     <Button variant="ghost" size="sm" asChild>
                         <Link
+                            href={pos.payments.create()}
+                            aria-label="Pelunasan kasbon"
+                        >
+                            <HandCoins />
+                            <span className="hidden sm:inline">Pelunasan</span>
+                        </Link>
+                    </Button>
+                    <Button variant="ghost" size="sm" asChild>
+                        <Link
                             href={pos.sales.index()}
                             aria-label="Riwayat transaksi"
                         >
@@ -695,8 +731,10 @@ export default function PosIndex({
                 error={payError}
                 qrisEnabled={qrisEnabled}
                 onOpenChange={(open) => !open && setDialog(null)}
+                customers={customers}
                 onPay={submitSale}
                 onQris={startQris}
+                onCredit={submitCredit}
             />
             <QrisDialog payment={pendingQris} onPaid={onQrisPaid} />
             <HoldDialog

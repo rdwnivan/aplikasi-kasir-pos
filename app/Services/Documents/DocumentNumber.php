@@ -22,6 +22,9 @@ final class DocumentNumber
 
     public const SALE_RETURN = 'RET';
 
+    /** Kasbon paid off (pelunasan), DESIGN.md §17. */
+    public const CUSTOMER_PAYMENT = 'PAY';
+
     public function next(string $prefix, ?CarbonInterface $date = null): string
     {
         $key = $prefix.'-'.($date ?? now())->format('Ymd');

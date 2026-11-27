@@ -36,6 +36,7 @@ type SaleRow = {
     total: number;
     paymentMethod: string | null;
     returnedTotal: number;
+    customer: string | null;
 };
 
 type Filters = {
@@ -253,6 +254,11 @@ export default function SaleIndex({
                                             ? (paymentLabels[s.paymentMethod] ??
                                               s.paymentMethod)
                                             : '–'}
+                                        {s.customer && (
+                                            <div className="text-xs text-muted-foreground">
+                                                {s.customer}
+                                            </div>
+                                        )}
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
                                         {s.itemsCount}

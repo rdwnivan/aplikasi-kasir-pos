@@ -43,6 +43,11 @@ class ReportExportController extends Controller
         return $this->download(ReportTables::shifts(DateRange::fromRequest($request, defaultDays: 7)), $format, $request);
     }
 
+    public function receivables(Request $request, string $format): Response
+    {
+        return $this->download(ReportTables::receivables(), $format, $request);
+    }
+
     private function download(ReportDocument $document, string $format, Request $request): Response
     {
         if ($format === 'xlsx') {

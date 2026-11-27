@@ -10,6 +10,7 @@ const tabs = [
     { title: 'Produk terlaris', href: reports.products() },
     { title: 'Nilai persediaan', href: reports.inventory() },
     { title: 'Kasir & shift', href: reports.shifts() },
+    { title: 'Piutang', href: reports.receivables() },
 ];
 
 export function ReportNav() {

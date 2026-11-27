@@ -47,6 +47,8 @@ type Overview = {
         revenue: number;
     }[];
     inventoryValue: number;
+    /** Kasbon owed now (DESIGN.md §17). */
+    receivables: { customers: number; balance: number; overdue: number };
 };
 
 type Props = {
@@ -100,7 +102,7 @@ function OwnerOverview({ overview: o }: { overview: Overview }) {
 
     return (
         <>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                 <StatCard
                     label="Penjualan hari ini"
                     value={formatRupiah(o.today.gross)}
@@ -122,6 +124,23 @@ function OwnerOverview({ overview: o }: { overview: Overview }) {
                     value={formatRupiah(o.inventoryValue)}
                     hint="stok × HPP rata-rata"
                 />
+                <Link
+                    href={reports.receivables()}
+                    className="rounded-xl transition-colors hover:bg-muted/50"
+                >
+                    <StatCard
+                        label="Piutang (kasbon)"
+                        value={formatRupiah(o.receivables.balance)}
+                        hint={
+                            o.receivables.customers === 0
+                                ? 'tidak ada yang berutang'
+                                : `${o.receivables.customers} pelanggan · ${formatRupiah(o.receivables.overdue)} lewat 30 hari`
+                        }
+                        tone={
+                            o.receivables.overdue > 0 ? 'negative' : 'default'
+                        }
+                    />
+                </Link>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">

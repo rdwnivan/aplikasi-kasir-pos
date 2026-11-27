@@ -38,7 +38,23 @@ export type ShiftSummary = {
     cashSalesTotal: number;
     refundsCount: number;
     refundsTotal: number;
+    /** Kasbon given in this shift (the part left owing). */
+    creditSalesTotal: number;
+    /** Kasbon paid off in cash into this drawer. */
+    paymentsCount: number;
+    paymentsTotal: number;
     expectedCash: number;
+};
+
+/** A customer in the kasbon picker (DESIGN.md §17). */
+export type CreditCustomer = {
+    id: number;
+    name: string;
+    phone: string | null;
+    balance: number;
+    creditLimit: number;
+    /** How much more kasbon fits under the limit. */
+    available: number;
 };
 
 export type TaxConfig = {
@@ -55,9 +71,12 @@ export type LastSale = {
     total: number;
     paid: number;
     change: number;
-    method: 'cash' | 'qris' | 'split' | null;
+    method: 'cash' | 'qris' | 'split' | 'credit' | null;
     cashAmount: number;
     qrisAmount: number;
+    creditAmount: number;
+    /** For kasbon: who owes it, and what they owed right after this sale. */
+    customer: { name: string; balance: number } | null;
 };
 
 export type PendingQris = {

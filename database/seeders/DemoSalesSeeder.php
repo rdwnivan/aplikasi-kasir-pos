@@ -2,6 +2,8 @@
 
 namespace Database\Seeders;
 
+use App\Actions\Customers\CreateCustomer;
+use App\Actions\Customers\ReceiveCustomerPayment;
 use App\Actions\Inventory\ReceiveGoods;
 use App\Actions\Purchasing\OrderPurchaseOrder;
 use App\Actions\Purchasing\ReceivePurchaseOrder;
@@ -12,6 +14,7 @@ use App\Actions\Sales\OpenShift;
 use App\Actions\Sales\ProcessSaleReturn;
 use App\Enums\DiscountType;
 use App\Enums\PaymentMethod;
+use App\Models\Customer;
 use App\Models\GoodsReceiptItem;
 use App\Models\Product;
 use App\Models\ProductUnit;
@@ -20,6 +23,7 @@ use App\Models\PurchaseOrderItem;
 use App\Models\Sale;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Services\Sales\CartBuilder;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Seeder;
@@ -43,6 +47,106 @@ class DemoSalesSeeder extends Seeder
 
     private int $restocks = 0;
 
+    /** @var array<string, Customer> Regulars who buy on kasbon (DESIGN.md §17). */
+    private array $customers = [];
+
+    /**
+     * Five regulars, added by the owner before the history starts. Pak Darto takes kasbon
+     * ten days before that, in a short shift of its own, and never pays: the overdue debt.
+     *
+     * @param  Collection<int, ProductUnit>  $units
+     */
+    private function seedCustomers(User $owner, User $cashier, $units, CarbonImmutable $until): void
+    {
+        Carbon::setTestNow($until->subDays(self::DAYS + 12)->setTime(9, 0));
+
+        foreach ([
+            'sari' => ['name' => 'Bu Sari (warung sebelah)', 'phone' => '081234500001', 'credit_limit' => 1_000_000, 'address' => 'Gg. Melati No. 3'],
+            'darto' => ['name' => 'Pak Darto', 'phone' => '081234500002', 'credit_limit' => 500_000, 'note' => 'Tukang ojek pangkalan depan'],
+            'rina' => ['name' => 'Mbak Rina', 'phone' => '081234500003', 'credit_limit' => 750_000],
+            'yanto' => ['name' => 'Pak RT Yanto', 'phone' => '081234500004', 'credit_limit' => 1_500_000, 'address' => 'Jl. Kenanga No. 1'],
+            'dewi' => ['name' => 'Bu Dewi', 'credit_limit' => 300_000],
+        ] as $key => $data) {
+            $this->customers[$key] = app(CreateCustomer::class)->handle($owner, $data);
+        }
+
+        $day = $until->subDays(self::DAYS + 10)->setTime(16, 0);
+        Carbon::setTestNow($day);
+        $shift = app(OpenShift::class)->handle($cashier, 100_000);
+        Carbon::setTestNow($day->addMinutes(30));
+        $this->kasbon($cashier, $this->customers['darto'], $this->basket($units));
+        Carbon::setTestNow($day->addHours(2));
+        app(CloseShift::class)->handle($shift, $shift->fresh()?->expectedCash() ?? 0);
+
+        Carbon::setTestNow();
+    }
+
+    /** About one sale in 25 goes on kasbon, for one of the regulars (never Pak Darto again). */
+    private function kasbonCustomer(): ?Customer
+    {
+        if (mt_rand(1, 25) !== 1) {
+            return null;
+        }
+
+        $pool = ['sari', 'sari', 'rina', 'yanto', 'dewi'];
+
+        return $this->customers[$pool[mt_rand(0, count($pool) - 1)]];
+    }
+
+    /**
+     * Kasbon through the real checkout, now and then with a cash down payment. Returns null
+     * when the regular is at their limit, so the sale is rung up as cash instead.
+     *
+     * @param  list<array{product_unit_id: int, qty: int}>  $lines
+     */
+    private function kasbon(User $cashier, Customer $customer, array $lines): ?Sale
+    {
+        $total = app(CartBuilder::class)->build($lines)->priced->total;
+        $down = mt_rand(1, 3) === 1 ? intdiv($total, 3) - intdiv($total, 3) % 5_000 : 0;
+        $customer->refresh();
+
+        if ($total < 1 || $customer->availableCredit() < $total - $down) {
+            return null;
+        }
+
+        return app(CompleteSale::class)->handle($cashier, $lines, paidAmount: $down, customer: $customer);
+    }
+
+    /** On about one day in four a regular (not Pak Darto) pays half, or all, of what they owe. */
+    private function payOffSome(User $cashier, CarbonInterface $at): void
+    {
+        if (mt_rand(1, 4) !== 1) {
+            return;
+        }
+
+        $debtors = array_values(array_filter(
+            $this->customers,
+            fn (Customer $c, string $key) => $key !== 'darto' && $c->refresh()->balance > 0,
+            ARRAY_FILTER_USE_BOTH,
+        ));
+        if ($debtors === []) {
+            return;
+        }
+
+        $customer = $debtors[mt_rand(0, count($debtors) - 1)];
+        $amount = mt_rand(1, 2) === 1 ? $customer->balance : max(1, intdiv($customer->balance, 2) - intdiv($customer->balance, 2) % 5_000);
+
+        Carbon::setTestNow($at);
+        app(ReceiveCustomerPayment::class)->handle($cashier, $customer, $amount, $amount === $customer->balance ? 'Lunas' : null);
+    }
+
+    /** One unit back from the latest kasbon: it comes off the debt (DESIGN.md §17.2). */
+    private function returnKasbon(User $cashier, CarbonInterface $at): void
+    {
+        $sale = Sale::query()->where('payment_method', PaymentMethod::Credit)->where('customer_id', '!=', $this->customers['darto']->id)->latest('id')->first();
+        $item = $sale?->items()->first();
+
+        if ($sale !== null && $item !== null) {
+            Carbon::setTestNow($at);
+            app(ProcessSaleReturn::class)->handle($cashier, $sale, [$item->id => 1], DemoUserSeeder::DEMO_OWNER_PIN, 'Salah beli');
+        }
+    }
+
     public function run(?CarbonImmutable $until = null): void
     {
         if (Sale::query()->exists()) {
@@ -58,6 +162,7 @@ class DemoSalesSeeder extends Seeder
 
         $units = ProductUnit::query()->with('product')->get();
         $buyUnits = GoodsReceiptItem::query()->orderBy('id')->get()->keyBy('product_id');
+        $this->seedCustomers(User::query()->where('email', 'owner@kasir.test')->firstOrFail(), $cashier, $units, $until);
 
         try {
             for ($d = self::DAYS; $d >= 1; $d--) {
@@ -79,6 +184,15 @@ class DemoSalesSeeder extends Seeder
                     Carbon::setTestNow($clock);
 
                     $discount = mt_rand(1, 10) === 1;
+
+                    // About one sale in 25 goes on the slate.
+                    $regular = $this->kasbonCustomer();
+                    if ($regular !== null && ($sale = $this->kasbon($cashier, $regular, $lines)) !== null) {
+                        $todaysSales[] = $sale;
+
+                        continue;
+                    }
+
                     $sale = app(CompleteSale::class)->handle(
                         $cashier,
                         $lines,
@@ -88,6 +202,14 @@ class DemoSalesSeeder extends Seeder
                     );
                     $this->settleLikeACustomer($sale);
                     $todaysSales[] = $sale;
+                }
+
+                // Regulars drop by to pay off part or all of their kasbon.
+                $this->payOffSome($cashier, $clock->addMinutes(10));
+
+                // Halfway through the month a kasbon customer brings something back.
+                if ($d === intdiv(self::DAYS, 2)) {
+                    $this->returnKasbon($cashier, $clock->addMinutes(15));
                 }
 
                 // Now and then something comes back the same day.

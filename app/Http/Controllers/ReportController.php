@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Reports\InventoryValuation;
+use App\Reports\Receivables;
 use App\Reports\SalesSummary;
 use App\Reports\ShiftRecap;
 use App\Reports\TopProducts;
@@ -40,6 +41,14 @@ class ReportController extends Controller
         return Inertia::render('reports/inventory', [
             'report' => InventoryValuation::build(),
             'asOf' => now()->toIso8601String(),
+        ]);
+    }
+
+    /** Kasbon owed per customer, aged, as of now (DESIGN.md §17). */
+    public function receivables(): Response
+    {
+        return Inertia::render('reports/receivables', [
+            'report' => Receivables::build(),
         ]);
     }
 

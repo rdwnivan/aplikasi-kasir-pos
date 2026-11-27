@@ -25,6 +25,7 @@ class ReceiptController extends Controller
 
         return view('receipts.sale', [
             'sale' => $sale->load(['items', 'user']),
+            'credit' => PosController::creditCustomer($sale),
             'store' => config('pos.store'),
             'width' => $request->integer('w') === 80 ? 80 : 58,
             'autoPrint' => $request->boolean('print'),

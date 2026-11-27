@@ -1,11 +1,16 @@
 <?php
 
+use App\Enums\PaymentMethod;
 use App\Enums\Role;
+use App\Models\Customer;
+use App\Models\CustomerPayment;
 use App\Models\GoodsReceipt;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\Sale;
+use App\Models\SaleReturn;
 use App\Models\User;
+use App\Reports\Receivables;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoUserSeeder;
 use Illuminate\Support\Facades\Hash;
@@ -63,4 +68,22 @@ it('seeds purchase orders in every state through the real actions', function () 
         ->and(GoodsReceipt::query()->whereNull('purchase_order_id')->count())->toBeGreaterThan(1);
 
     $this->artisan('stock:rebuild')->assertSuccessful();
+});
+
+it('seeds kasbon, pelunasan and a kasbon return through the real actions', function () {
+    config(['pos.demo_sales_history' => true]);
+    $this->seed(DatabaseSeeder::class);
+
+    expect(Customer::query()->count())->toBe(5)
+        ->and(Sale::query()->where('payment_method', PaymentMethod::Credit)->count())->toBeGreaterThan(5)
+        ->and(CustomerPayment::query()->count())->toBeGreaterThan(2)
+        ->and(SaleReturn::query()->where('credit_amount', '>', 0)->count())->toBeGreaterThanOrEqual(1);
+
+    $report = Receivables::build();
+    expect($report['totals']['balance'])->toBeGreaterThan(0)
+        ->and($report['totals']['overdue'])->toBeGreaterThan(0)
+        ->and(collect($report['rows'])->firstWhere('customer', 'Pak Darto')['age31to60'] ?? 0)->toBeGreaterThan(0);
+
+    $this->artisan('stock:rebuild')->assertSuccessful();
+    $this->artisan('receivables:rebuild')->assertSuccessful();
 });

@@ -27,6 +27,7 @@ class SaleController extends Controller
                 $request->cartDiscountType(),
                 $request->cartDiscountValue(),
                 $held,
+                $request->creditCustomer(),
             );
         } catch (InsufficientStockException $e) {
             throw ValidationException::withMessages(['items' => $e->getMessage()]);

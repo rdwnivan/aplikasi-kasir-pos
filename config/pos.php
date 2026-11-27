@@ -30,6 +30,13 @@ return [
         'prices_include_tax' => (bool) env('POS_PRICES_INCLUDE_TAX', true),
     ],
 
+    // Kasbon (DESIGN.md §17): the credit limit a new customer gets. Cashiers may add customers
+    // but not set limits; only an owner changes a customer's limit afterwards. 0 = every new
+    // customer needs an owner to allow kasbon first.
+    'credit' => [
+        'default_limit' => (int) env('POS_CREDIT_DEFAULT_LIMIT', 500000),
+    ],
+
     // Seed 30 days of sales history (DemoSalesSeeder) outside the local environment too,
     // for a public demo deploy. Local always gets it.
     'demo_sales_history' => (bool) env('POS_DEMO_SALES_HISTORY', false),

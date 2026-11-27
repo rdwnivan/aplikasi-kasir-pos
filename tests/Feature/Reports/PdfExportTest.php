@@ -128,7 +128,7 @@ it('escapes names from the database', function () {
 });
 
 it('refuses a PDF with more rows than the limit, pointing to Excel', function () {
-    config(['pos.exports.pdf_max_cells' => 22]); // 2 rows of the 11 sales columns
+    config(['pos.exports.pdf_max_cells' => 24]); // 2 rows of the 12 sales columns
 
     $this->actingAs($this->owner)
         ->from(route('reports.sales'))
@@ -139,7 +139,7 @@ it('refuses a PDF with more rows than the limit, pointing to Excel', function ()
 });
 
 it('still makes the PDF at exactly the limit', function () {
-    config(['pos.exports.pdf_max_cells' => 22]); // 2 rows of the 11 sales columns
+    config(['pos.exports.pdf_max_cells' => 24]); // 2 rows of the 12 sales columns
 
     $this->actingAs($this->owner)
         ->get(route('reports.pdf.sales', ['from' => '2026-11-20', 'to' => '2026-11-21']))
@@ -148,7 +148,7 @@ it('still makes the PDF at exactly the limit', function () {
 });
 
 it('counts cells, so a narrower table may have more rows', function () {
-    config(['pos.exports.pdf_max_cells' => 21]); // 1 row of the 11 sales columns, 3 of the 7 inventory ones
+    config(['pos.exports.pdf_max_cells' => 21]); // 1 row of the 12 sales columns, 3 of the 7 inventory ones
 
     $this->actingAs($this->owner)
         ->get(route('reports.pdf.sales', ['from' => '2026-11-20', 'to' => '2026-11-21']))

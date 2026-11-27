@@ -19,7 +19,7 @@ final class SalesSummary
 {
     /**
      * @param  'day'|'month'  $group
-     * @return array{rows: list<array{period: string, transactions: int, gross: int, cash: int, qris: int, refunds: int, tax: int, netSales: int, cogs: int, grossProfit: int, margin: float}>, totals: array{transactions: int, gross: int, cash: int, qris: int, refunds: int, tax: int, netSales: int, cogs: int, grossProfit: int, margin: float, averageTicket: int}}
+     * @return array{rows: list<array{period: string, transactions: int, gross: int, cash: int, qris: int, credit: int, refunds: int, tax: int, netSales: int, cogs: int, grossProfit: int, margin: float}>, totals: array{transactions: int, gross: int, cash: int, qris: int, credit: int, refunds: int, tax: int, netSales: int, cogs: int, grossProfit: int, margin: float, averageTicket: int}}
      */
     public static function build(DateRange $range, string $group = 'day'): array
     {
@@ -36,6 +36,7 @@ final class SalesSummary
             ->selectRaw('SUM(cogs_total) AS cogs')
             ->selectRaw('SUM('.Sql::cashPart().') AS cash')
             ->selectRaw('SUM('.Sql::qrisPart().') AS qris')
+            ->selectRaw('SUM('.Sql::creditPart().') AS credit')
             ->get()
             ->keyBy('bucket');
 
@@ -64,6 +65,7 @@ final class SalesSummary
                 cogs: Sql::rupiah($s->cogs ?? 0),
                 cash: Sql::rupiah($s->cash ?? 0),
                 qris: Sql::rupiah($s->qris ?? 0),
+                credit: Sql::rupiah($s->credit ?? 0),
                 refunds: Sql::rupiah($r->refunds ?? 0),
                 refundTax: Sql::rupiah($r->refund_tax ?? 0),
                 refundCogs: Sql::rupiah($r->refund_cogs ?? 0),
@@ -71,7 +73,7 @@ final class SalesSummary
             $rows[] = $row;
         }
 
-        $totals = ['transactions' => 0, 'gross' => 0, 'cash' => 0, 'qris' => 0, 'refunds' => 0, 'tax' => 0, 'netSales' => 0, 'cogs' => 0, 'grossProfit' => 0];
+        $totals = ['transactions' => 0, 'gross' => 0, 'cash' => 0, 'qris' => 0, 'credit' => 0, 'refunds' => 0, 'tax' => 0, 'netSales' => 0, 'cogs' => 0, 'grossProfit' => 0];
         foreach ($rows as $row) {
             foreach (array_keys($totals) as $key) {
                 $totals[$key] += $row[$key];
@@ -83,7 +85,7 @@ final class SalesSummary
         return ['rows' => $rows, 'totals' => $totals];
     }
 
-    /** @return array{period: string, transactions: int, gross: int, cash: int, qris: int, refunds: int, tax: int, netSales: int, cogs: int, grossProfit: int, margin: float} */
+    /** @return array{period: string, transactions: int, gross: int, cash: int, qris: int, credit: int, refunds: int, tax: int, netSales: int, cogs: int, grossProfit: int, margin: float} */
     private static function row(
         string $bucket,
         int $transactions,
@@ -92,6 +94,7 @@ final class SalesSummary
         int $cogs,
         int $cash,
         int $qris,
+        int $credit,
         int $refunds,
         int $refundTax,
         int $refundCogs,
@@ -106,6 +109,7 @@ final class SalesSummary
             'gross' => $gross,
             'cash' => $cash,
             'qris' => $qris,
+            'credit' => $credit,
             'refunds' => $refunds,
             'tax' => $tax - $refundTax,
             'netSales' => $netSales,

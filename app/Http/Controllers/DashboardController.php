@@ -6,12 +6,14 @@ use App\Enums\Role;
 use App\Queries\LowStock;
 use App\Queries\OpenPurchaseOrders;
 use App\Reports\InventoryValuation;
+use App\Reports\Receivables;
 use App\Reports\SalesSummary;
 use App\Reports\TopProducts;
 use App\Support\DateRange;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -65,6 +67,7 @@ class DashboardController extends Controller
             ], $summary['rows']),
             'topProducts' => TopProducts::build($range, 5),
             'inventoryValue' => InventoryValuation::build()['total'],
+            'receivables' => Arr::only(Receivables::build()['totals'], ['customers', 'balance', 'overdue']),
         ];
     }
 }

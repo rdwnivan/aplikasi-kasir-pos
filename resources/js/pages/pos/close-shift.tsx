@@ -57,6 +57,12 @@ export default function CloseShift({
                                 label={`Penjualan tunai (${shift.salesCount} transaksi)`}
                                 value={formatRupiah(shift.cashSalesTotal)}
                             />
+                            {shift.paymentsCount > 0 && (
+                                <Row
+                                    label={`Pelunasan kasbon (${shift.paymentsCount})`}
+                                    value={formatRupiah(shift.paymentsTotal)}
+                                />
+                            )}
                             {shift.refundsCount > 0 && (
                                 <Row
                                     label={`Retur tunai (${shift.refundsCount})`}

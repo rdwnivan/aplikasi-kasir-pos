@@ -4,6 +4,7 @@ import {
     ClipboardList,
     ClipboardPen,
     LayoutGrid,
+    NotebookPen,
     PackageOpen,
     ReceiptText,
     Package,
@@ -28,6 +29,7 @@ import {
 import { useRoles } from '@/hooks/use-roles';
 import { dashboard } from '@/routes';
 import categories from '@/routes/categories';
+import customers from '@/routes/customers';
 import goodsReceipts from '@/routes/goods-receipts';
 import pos from '@/routes/pos';
 import products from '@/routes/products';
@@ -59,6 +61,11 @@ export function AppSidebar() {
                               title: 'Riwayat transaksi',
                               href: pos.sales.index(),
                               icon: ReceiptText,
+                          },
+                          {
+                              title: 'Pelanggan & kasbon',
+                              href: customers.index(),
+                              icon: NotebookPen,
                           },
                       ]
                     : []),

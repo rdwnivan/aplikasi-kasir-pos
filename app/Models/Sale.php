@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $number
  * @property int $shift_id
  * @property int $user_id
+ * @property int|null $customer_id Set on kasbon (DESIGN.md §17).
  * @property SaleStatus $status
  * @property string|null $held_label
  * @property int $subtotal
@@ -30,6 +31,7 @@ use Illuminate\Support\Carbon;
  * @property int $total
  * @property PaymentMethod|null $payment_method
  * @property int|null $split_cash_amount Cash part of a `split` payment; null otherwise.
+ * @property int|null $credit_amount Part of a `credit` sale left owing; null otherwise.
  * @property int|null $paid_amount
  * @property int|null $change_amount
  * @property string $cogs_total
@@ -58,19 +60,26 @@ class Sale extends Model
             'payment_checked_at' => 'datetime',
             ...array_fill_keys([
                 'subtotal', 'discount_value', 'discount_amount', 'taxable_amount', 'dpp_amount',
-                'tax_amount', 'total', 'paid_amount', 'change_amount', 'split_cash_amount',
+                'tax_amount', 'total', 'paid_amount', 'change_amount', 'split_cash_amount', 'credit_amount',
             ], 'integer'),
         ];
     }
 
-    /** What went into the drawer: the whole total for cash, the cash part for split. */
+    /** What went into the drawer: the whole total for cash, the cash part for split, the down payment for kasbon. */
     public function cashPart(): int
     {
         return match ($this->payment_method) {
             PaymentMethod::Cash => $this->total,
             PaymentMethod::Split => (int) $this->split_cash_amount,
+            PaymentMethod::Credit => $this->total - (int) $this->credit_amount,
             default => 0,
         };
+    }
+
+    /** What the customer was left owing at checkout (kasbon). */
+    public function creditPart(): int
+    {
+        return $this->payment_method === PaymentMethod::Credit ? (int) $this->credit_amount : 0;
     }
 
     /** What is (or was to be) paid through Midtrans. */
@@ -87,6 +96,18 @@ class Sale extends Model
     public function items(): HasMany
     {
         return $this->hasMany(SaleItem::class);
+    }
+
+    /** @return BelongsTo<Customer, $this> */
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class);
+    }
+
+    /** @return HasMany<CustomerLedgerEntry, $this> */
+    public function ledgerEntries(): HasMany
+    {
+        return $this->hasMany(CustomerLedgerEntry::class);
     }
 
     /** @return BelongsTo<Shift, $this> */

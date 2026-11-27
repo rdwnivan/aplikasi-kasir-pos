@@ -85,6 +85,11 @@
             @if ($sale->payment_reference)
                 <tr class="muted"><td colspan="2">Ref {{ $sale->payment_reference }}</td></tr>
             @endif
+        @elseif ($sale->payment_method?->value === 'credit')
+            @if ($sale->cashPart() > 0)
+                <tr><td>Uang muka tunai</td><td class="r">{{ $rp($sale->cashPart()) }}</td></tr>
+            @endif
+            <tr class="b"><td>Kasbon</td><td class="r">{{ $rp($sale->creditPart()) }}</td></tr>
         @elseif ($sale->payment_method?->value === 'qris')
             <tr><td>QRIS</td><td class="r">{{ $rp($sale->paid_amount ?? $sale->total) }}</td></tr>
             @if ($sale->payment_reference)
@@ -95,6 +100,15 @@
             <tr><td>Kembali</td><td class="r">{{ $rp($sale->change_amount) }}</td></tr>
         @endif
     </table>
+    @if ($credit)
+        <hr>
+        <table>
+            <tr><td>Pelanggan</td><td class="r">{{ $credit['name'] }}</td></tr>
+            {{-- As of this sale (the ledger row), so a reprint shows the same figure. --}}
+            <tr class="b"><td>Sisa utang</td><td class="r">{{ $rp($credit['balance']) }}</td></tr>
+        </table>
+        <div style="margin-top:8mm" class="c muted">( tanda tangan {{ $credit['name'] }} )</div>
+    @endif
     @if ($sale->tax_amount > 0)
         <hr>
         <table class="muted">

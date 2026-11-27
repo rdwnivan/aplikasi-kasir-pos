@@ -13,6 +13,7 @@ use App\Models\SaleReturn;
 use App\Models\SaleReturnItem;
 use App\Models\Shift;
 use App\Models\User;
+use App\Services\Receivables\CustomerLedger;
 use App\Support\DateRange;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -32,7 +33,7 @@ class SaleHistoryController extends Controller
         $search = trim((string) $request->query('q', ''));
 
         $query = Sale::query()
-            ->with(['user', 'shift'])
+            ->with(['user', 'shift', 'customer'])
             ->withCount('items')
             ->withSum('returns as returned_total', 'total')
             ->whereNotIn('status', [SaleStatus::Held->value])
@@ -80,6 +81,7 @@ class SaleHistoryController extends Controller
             'total' => $s->total,
             'paymentMethod' => $s->payment_method?->value,
             'returnedTotal' => (int) $s->getAttribute('returned_total'),
+            'customer' => $s->customer?->name,
         ]);
 
         return Inertia::render('pos/sales/index', [
@@ -90,13 +92,14 @@ class SaleHistoryController extends Controller
         ]);
     }
 
-    public function show(Request $request, Sale $sale): Response
+    public function show(Request $request, Sale $sale, CustomerLedger $ledger): Response
     {
         $user = $request->user();
         abort_if($sale->status === SaleStatus::Held, 404);
         abort_unless($user->hasRole(Role::Owner->value) || $sale->user_id === $user->id, 403);
 
         $sale->load([
+            'customer',
             'user',
             'items' => fn ($q) => $q->withSum('returnItems as returned_qty', 'qty'),
             'returns' => fn ($q) => $q->with(['user', 'approver', 'items.saleItem'])->orderBy('id'),
@@ -120,6 +123,10 @@ class SaleHistoryController extends Controller
                 'changeAmount' => $sale->change_amount,
                 'cashAmount' => $sale->cashPart(),
                 'qrisAmount' => $sale->qrisPart(),
+                'creditAmount' => $sale->creditPart(),
+                'customer' => $sale->customer === null ? null : ['id' => $sale->customer->id, 'name' => $sale->customer->name],
+                // Still owed on this kasbon now: a return takes this off first, the rest is cash.
+                'owed' => $sale->customer_id === null ? 0 : $ledger->owedOn($sale->id),
                 'items' => $sale->items->map(fn (SaleItem $item) => [
                     'id' => $item->id,
                     'name' => $item->product_name,
@@ -138,6 +145,7 @@ class SaleHistoryController extends Controller
                     'user' => $r->user->name,
                     'approver' => $r->approver->name,
                     'total' => $r->total,
+                    'creditAmount' => $r->credit_amount,
                     'reason' => $r->reason,
                     'items' => $r->items->map(fn (SaleReturnItem $i) => [
                         'name' => $i->saleItem->product_name,
