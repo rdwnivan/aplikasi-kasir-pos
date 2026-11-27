@@ -5,9 +5,12 @@ namespace App\Actions\Sales;
 use App\Actions\Customers\QrisCustomerPayments;
 use App\Enums\SaleStatus;
 use App\Enums\StockMovementType;
+use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\SaleReturn;
+use App\Models\StockBatch;
+use App\Models\StockMovement;
 use App\Models\User;
 use App\Services\Auth\OwnerPin;
 use App\Services\Documents\DocumentNumber;
@@ -153,14 +156,16 @@ final class ProcessSaleReturn
                     'cogs' => $cogs,
                 ]);
 
+                $product = $item->product()->withTrashed()->firstOrFail();
                 $this->ledger->receive(
-                    $item->product()->withTrashed()->firstOrFail(),
+                    $product,
                     $baseQty,
                     $unitCost,
                     StockMovementType::SaleReturn,
                     reference: $return,
                     user: $actor,
                     note: $locked->number,
+                    batches: self::originBatches($locked, $product, $baseQty),
                 );
 
                 $total += $amount;
@@ -178,6 +183,51 @@ final class ProcessSaleReturn
 
             return $return->load('items');
         });
+    }
+
+    /**
+     * Where returned goods of a product that tracks expiry go (DESIGN.md §19 P6): back into the
+     * batches this sale took them from, less what earlier returns already put back, the earliest
+     * expiry first (nobody knows which unit came back, and the earliest is the safe guess). Goods
+     * sold before tracking began go into the batch without a date. Runs under the sale's lock,
+     * so returns of one sale cannot both count the same units.
+     *
+     * @return list<array<string, mixed>>|null null for a product that does not track expiry
+     */
+    private static function originBatches(Sale $sale, Product $product, int $qty): ?array
+    {
+        if (! $product->tracks_expiry) {
+            return null;
+        }
+
+        $byBatch = fn (StockMovementType $type, string $referenceType, array $referenceIds) => StockMovement::query()
+            ->where('product_id', $product->id)
+            ->where('type', $type)
+            ->where('reference_type', $referenceType)
+            ->whereIn('reference_id', $referenceIds)
+            ->whereNotNull('stock_batch_id')
+            ->groupBy('stock_batch_id')
+            ->selectRaw('stock_batch_id, SUM(qty) AS qty')
+            ->pluck('qty', 'stock_batch_id');
+
+        $taken = $byBatch(StockMovementType::Sale, $sale->getMorphClass(), [$sale->id]);
+        $returned = $byBatch(StockMovementType::SaleReturn, (new SaleReturn)->getMorphClass(), SaleReturn::query()->where('sale_id', $sale->id)->pluck('id')->all());
+
+        $parts = [];
+        $left = $qty;
+        foreach (StockBatch::query()->whereIn('id', $taken->keys())->fefo()->get() as $batch) {
+            $room = -(int) $taken[$batch->id] - (int) ($returned[$batch->id] ?? 0);
+            $put = min($left, max(0, $room));
+            if ($put > 0) {
+                $parts[] = ['batch' => $batch, 'qty' => $put];
+                $left -= $put;
+            }
+        }
+        if ($left > 0) {
+            $parts[] = ['expires_on' => null, 'code' => null, 'qty' => $left];
+        }
+
+        return $parts;
     }
 
     /**

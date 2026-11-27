@@ -1,11 +1,13 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
+    CalendarClock,
     ChartColumn,
     ClipboardList,
     ClipboardPen,
     LayoutGrid,
     NotebookPen,
     PackageOpen,
+    PackageX,
     ReceiptText,
     Package,
     Ruler,
@@ -35,6 +37,7 @@ import pos from '@/routes/pos';
 import products from '@/routes/products';
 import purchaseOrders from '@/routes/purchase-orders';
 import reports from '@/routes/reports';
+import stockDisposals from '@/routes/stock-disposals';
 import stockOpnames from '@/routes/stock-opnames';
 import suppliers from '@/routes/suppliers';
 import units from '@/routes/units';
@@ -109,6 +112,16 @@ export function AppSidebar() {
                               title: 'Stok opname',
                               href: stockOpnames.index(),
                               icon: ClipboardList,
+                          },
+                          {
+                              title: 'Barang dibuang',
+                              href: stockDisposals.index(),
+                              icon: PackageX,
+                          },
+                          {
+                              title: 'Kedaluwarsa',
+                              href: reports.expiry(),
+                              icon: CalendarClock,
                           },
                       ],
                   },

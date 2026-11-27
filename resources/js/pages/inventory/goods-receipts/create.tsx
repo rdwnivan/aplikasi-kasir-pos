@@ -1,5 +1,6 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { Trash2 } from 'lucide-react';
+import { ExpiryBatchesInput } from '@/components/inventory/expiry';
 import { ProductPicker } from '@/components/inventory/product-picker';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
@@ -18,14 +19,23 @@ import {
 import { formatQty } from '@/lib/format';
 import { formatRupiah } from '@/lib/money';
 import goodsReceipts from '@/routes/goods-receipts';
-import type { Option, ProductOption } from '@/types';
+import type { BatchInput, Option, ProductOption } from '@/types';
 
 type Line = {
     product_id: number;
     unit_id: number;
     qty: number;
     unit_price: number;
+    /** Only for products that track expiry (DESIGN.md §19). */
+    batches?: BatchInput[];
 };
+
+/** A line's quantity changed: a single expiry date follows it. */
+function withQty(line: Line, qty: number): Partial<Line> {
+    return line.batches?.length === 1
+        ? { qty, batches: [{ ...line.batches[0], qty }] }
+        : { qty };
+}
 
 /** Suggested buy price for a unit: current average HPP × conversion. */
 function suggestedPrice(product: ProductOption, unitId: number): number {
@@ -79,7 +89,8 @@ export default function GoodsReceiptCreate({
         );
 
         if (existing >= 0) {
-            setLine(existing, { qty: form.data.items[existing].qty + 1 });
+            const line = form.data.items[existing];
+            setLine(existing, withQty(line, line.qty + 1));
 
             return;
         }
@@ -91,6 +102,9 @@ export default function GoodsReceiptCreate({
                 unit_id: unitId,
                 qty: 1,
                 unit_price: suggestedPrice(product, unitId),
+                ...(product.tracksExpiry && {
+                    batches: [{ expires_on: '', code: '', qty: 1 }],
+                }),
             },
         ]);
     };
@@ -268,12 +282,15 @@ export default function GoodsReceiptCreate({
                                             aria-label="Jumlah"
                                             value={line.qty}
                                             onChange={(e) =>
-                                                setLine(i, {
-                                                    qty:
+                                                setLine(
+                                                    i,
+                                                    withQty(
+                                                        line,
                                                         Number(
                                                             e.target.value,
                                                         ) || 0,
-                                                })
+                                                    ),
+                                                )
                                             }
                                         />
                                         <InputError
@@ -329,6 +346,22 @@ export default function GoodsReceiptCreate({
                                     >
                                         <Trash2 />
                                     </Button>
+                                    {line.batches && (
+                                        <div className="sm:col-span-5">
+                                            <ExpiryBatchesInput
+                                                batches={line.batches}
+                                                lineQty={line.qty}
+                                                unit={unit?.name ?? ''}
+                                                minDate={form.data.received_at}
+                                                error={
+                                                    errors[`items.${i}.batches`]
+                                                }
+                                                onChange={(batches) =>
+                                                    setLine(i, { batches })
+                                                }
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}

@@ -8,6 +8,8 @@ use App\Models\GoodsReceipt;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleReturn;
+use App\Models\StockBatch;
+use App\Models\StockDisposal;
 use App\Models\StockMovement;
 use App\Models\StockOpname;
 use Illuminate\Database\Eloquent\Model;
@@ -26,8 +28,17 @@ class StockCardController extends Controller
         $canSeeSales = $request->user()->hasRole(Role::Owner->value);
         $product->load('baseUnit');
 
+        // Batches of goods that track expiry (DESIGN.md §19): those with stock, plus the one
+        // the movements are filtered by.
+        $batchId = $request->integer('batch') ?: null;
+        $batches = $product->batches()
+            ->where(fn ($q) => $q->where('qty_on_hand', '!=', 0)->when($batchId, fn ($q) => $q->orWhere('id', $batchId)))
+            ->fefo()
+            ->get();
+
         $movements = $product->stockMovements()
-            ->with(['user', 'reference'])
+            ->with(['user', 'reference', 'batch'])
+            ->when($batchId, fn ($q) => $q->where('stock_batch_id', $batchId))
             ->orderByDesc('id')
             ->paginate(30)
             ->through(fn (StockMovement $m) => [
@@ -42,7 +53,10 @@ class StockCardController extends Controller
                 'user' => $m->user?->name,
                 'note' => $m->note,
                 'reference' => self::reference($m->reference, $canSeeSales),
-            ]);
+                'batch' => $m->batch?->label(),
+                'batchId' => $m->stock_batch_id,
+            ])
+            ->withQueryString();
 
         return Inertia::render('catalog/products/stock-card', [
             'product' => [
@@ -54,7 +68,17 @@ class StockCardController extends Controller
                 'minStock' => $product->min_stock,
                 'avgCost' => (float) $product->avg_cost,
                 'archived' => $product->trashed(),
+                'tracksExpiry' => $product->tracks_expiry,
             ],
+            'batches' => $batches->map(fn (StockBatch $b) => [
+                'id' => $b->id,
+                'label' => $b->label(),
+                'expiresOn' => $b->expires_on?->toDateString(),
+                'code' => $b->code,
+                'qty' => $b->qty_on_hand,
+                'status' => $b->status(),
+            ])->all(),
+            'batchId' => $batchId,
             'movements' => $movements,
         ]);
     }
@@ -67,6 +91,7 @@ class StockCardController extends Controller
             $reference instanceof StockOpname => [$reference->number, 'stock-opnames.show'],
             $reference instanceof Sale => [$reference->number ?? '#'.$reference->id, 'pos.sales.show'],
             $reference instanceof SaleReturn => [$reference->number, 'pos.sales.show'],
+            $reference instanceof StockDisposal => [$reference->number, 'stock-disposals.show'],
             default => [null, null],
         };
 

@@ -1,5 +1,9 @@
 import { Head, Link } from '@inertiajs/react';
 import { DailyBarChart } from '@/components/charts/daily-bar-chart';
+import {
+    ExpiryCard,
+    type ExpirySummary,
+} from '@/components/dashboard/expiry-card';
 import { LowStockCard } from '@/components/dashboard/low-stock-card';
 import type { LowStockItem } from '@/components/dashboard/low-stock-card';
 import { OpenOrdersCard } from '@/components/dashboard/open-orders-card';
@@ -54,10 +58,17 @@ type Overview = {
 type Props = {
     lowStock: { count: number; items: LowStockItem[] } | null;
     openOrders: OpenOrders | null;
+    /** Batches by expiry (DESIGN.md §19); null when nothing tracks expiry. */
+    expiry: ExpirySummary | null;
     overview: Overview | null;
 };
 
-export default function Dashboard({ lowStock, openOrders, overview }: Props) {
+export default function Dashboard({
+    lowStock,
+    openOrders,
+    expiry,
+    overview,
+}: Props) {
     return (
         <>
             <Head title="Dashboard" />
@@ -90,6 +101,7 @@ export default function Dashboard({ lowStock, openOrders, overview }: Props) {
                             items={lowStock.items}
                         />
                         {openOrders && <OpenOrdersCard {...openOrders} />}
+                        {expiry && <ExpiryCard {...expiry} />}
                     </div>
                 )}
             </div>

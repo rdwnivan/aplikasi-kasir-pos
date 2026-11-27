@@ -11,6 +11,7 @@ const tabs = [
     { title: 'Nilai persediaan', href: reports.inventory() },
     { title: 'Kasir & shift', href: reports.shifts() },
     { title: 'Piutang', href: reports.receivables() },
+    { title: 'Kedaluwarsa', href: reports.expiry() },
 ];
 
 export function ReportNav() {

@@ -34,6 +34,7 @@ class ProductRequest extends FormRequest
             'base_unit_id' => ['required', 'integer', Rule::exists('units', 'id')],
             'min_stock' => ['required', 'integer', 'min:0', 'max:1000000'],
             'is_active' => ['boolean'],
+            'tracks_expiry' => ['sometimes', 'boolean'],
             'units' => ['required', 'array', 'min:1', 'max:10'],
             'units.*.unit_id' => ['required', 'integer', Rule::exists('units', 'id')],
             'units.*.conversion' => ['required', 'integer', 'min:1', 'max:100000'],
@@ -60,6 +61,12 @@ class ProductRequest extends FormRequest
             'units.*.price' => 'harga jual',
             'units.*.barcode' => 'barcode',
         ];
+    }
+
+    /** Expiry tracking as sent, or null when the form left it out (DESIGN.md §19). */
+    public function tracksExpiry(): ?bool
+    {
+        return $this->has('tracks_expiry') ? $this->boolean('tracks_expiry') : null;
     }
 
     /** @return array{sku: string, name: string, category_id: int|null, base_unit_id: int, min_stock: int, is_active: bool} */

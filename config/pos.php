@@ -45,6 +45,11 @@ return [
     // re-roled or have their email, password or PIN changed. See App\Support\DemoAccounts.
     'protect_demo_accounts' => (bool) env('POS_PROTECT_DEMO_ACCOUNTS', false),
 
+    // Batches expiring within this many days show as "hampir kedaluwarsa" (DESIGN.md §19).
+    'expiry' => [
+        'warn_days' => (int) env('POS_EXPIRY_WARN_DAYS', 30),
+    ],
+
     'exports' => [
         // dompdf gets slow and memory-hungry on big tables, so a PDF table with more cells
         // than this (rows × columns) is refused; Excel has no limit. 6.500 cells took 3,5 s

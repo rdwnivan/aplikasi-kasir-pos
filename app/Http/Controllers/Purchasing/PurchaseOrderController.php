@@ -197,6 +197,7 @@ class PurchaseOrderController extends Controller
                         'id' => $item->id,
                         'product' => $item->product->name,
                         'sku' => $item->product->sku,
+                        'tracksExpiry' => $item->product->tracks_expiry,
                         'unit' => $item->unit->name,
                         'baseUnit' => $item->product->baseUnit->name,
                         'conversion' => $item->product->units->firstWhere('unit_id', $item->unit_id)->conversion ?? 1,

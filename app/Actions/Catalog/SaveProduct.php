@@ -4,6 +4,8 @@ namespace App\Actions\Catalog;
 
 use App\Models\Product;
 use App\Models\ProductUnit;
+use App\Models\User;
+use App\Services\Inventory\StockLedger;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -20,11 +22,13 @@ use Illuminate\Validation\ValidationException;
  */
 final class SaveProduct
 {
+    public function __construct(private readonly StockLedger $ledger) {}
+
     /**
      * @param  array{sku: string, name: string, category_id: int|null, base_unit_id: int, min_stock: int, is_active: bool}  $attributes
      * @param  list<array{unit_id: int, conversion: int, price: int, barcode: string|null}>  $units
      */
-    public function handle(array $attributes, array $units, ?Product $product = null): Product
+    public function handle(array $attributes, array $units, ?Product $product = null, ?bool $tracksExpiry = null, ?User $by = null): Product
     {
         $this->validateUnits($attributes['base_unit_id'], $units);
 
@@ -36,11 +40,19 @@ final class SaveProduct
             ]);
         }
 
-        return DB::transaction(function () use ($attributes, $units, $product) {
+        return DB::transaction(function () use ($attributes, $units, $product, $tracksExpiry, $by) {
             $product ??= new Product;
             $product->fill($attributes)->save();
 
             $this->syncUnits($product, $units);
+
+            // Expiry tracking moves stock in or out of batches, so only the ledger switches it
+            // (DESIGN.md §19 P2); null leaves it as it is.
+            if ($tracksExpiry === true) {
+                $this->ledger->startTracking($product, $by);
+            } elseif ($tracksExpiry === false) {
+                $this->ledger->stopTracking($product, $by);
+            }
 
             return $product->load('units');
         });

@@ -2,7 +2,6 @@
 
 namespace App\Actions\Inventory;
 
-use App\Models\Product;
 use App\Models\StockOpname;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -12,22 +11,17 @@ use Illuminate\Validation\ValidationException;
  */
 final class UpdateStockOpname
 {
+    use SavesOpnameCounts;
+
     /**
      * @param  array<int, int>  $counts  product_id => counted qty in base units
+     * @param  array<int, list<array<string, mixed>>>  $batches  per-batch counts of products that track expiry
      */
-    public function handle(StockOpname $opname, array $counts, ?string $note = null): StockOpname
+    public function handle(StockOpname $opname, array $counts, ?string $note = null, array $batches = []): StockOpname
     {
-        if ($counts === []) {
-            throw ValidationException::withMessages(['items' => 'Minimal satu barang harus dihitung.']);
-        }
+        [$counts, $batches] = $this->checkCounts($counts, $batches);
 
-        $known = Product::query()->whereIn('id', array_keys($counts))->pluck('id')->all();
-        $missing = array_diff(array_keys($counts), $known);
-        if ($missing !== []) {
-            throw ValidationException::withMessages(['items' => 'Ada produk yang tidak ditemukan.']);
-        }
-
-        return DB::transaction(function () use ($opname, $counts, $note) {
+        return DB::transaction(function () use ($opname, $counts, $batches, $note) {
             /** @var StockOpname $locked */
             $locked = StockOpname::query()->whereKey($opname->id)->lockForUpdate()->firstOrFail();
 
@@ -35,10 +29,8 @@ final class UpdateStockOpname
                 throw ValidationException::withMessages(['opname' => "Stok opname {$locked->number} sudah diposting dan tidak bisa diubah."]);
             }
 
-            $locked->items()->delete();
-            foreach ($counts as $productId => $qty) {
-                $locked->items()->create(['product_id' => $productId, 'counted_qty' => $qty]);
-            }
+            $locked->items()->delete(); // batch counts go with them (cascade)
+            $this->writeCounts($locked, $counts, $batches);
             $locked->update(['note' => $note]);
 
             return $locked->load('items');

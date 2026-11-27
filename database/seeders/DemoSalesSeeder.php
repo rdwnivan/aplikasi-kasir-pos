@@ -6,6 +6,9 @@ use App\Actions\Customers\CreateCustomer;
 use App\Actions\Customers\QrisCustomerPayments;
 use App\Actions\Customers\ReceiveCustomerPayment;
 use App\Actions\Customers\StartQrisCustomerPayment;
+use App\Actions\Inventory\CreateStockOpname;
+use App\Actions\Inventory\DisposeStock;
+use App\Actions\Inventory\PostStockOpname;
 use App\Actions\Inventory\ReceiveGoods;
 use App\Actions\Purchasing\OrderPurchaseOrder;
 use App\Actions\Purchasing\ReceivePurchaseOrder;
@@ -23,8 +26,11 @@ use App\Models\ProductUnit;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\Sale;
+use App\Models\StockBatch;
 use App\Models\Supplier;
+use App\Models\Unit;
 use App\Models\User;
+use App\Services\Inventory\StockLedger;
 use App\Services\Sales\CartBuilder;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -277,6 +283,8 @@ class DemoSalesSeeder extends Seeder
             if ($supplier !== null) {
                 $this->openPurchaseOrders($until, $buyUnits, $receiver, $supplier->id);
             }
+
+            $this->expiryAtTheEnd($receiver, $supplier?->id, $until);
         } finally {
             Carbon::setTestNow();
         }
@@ -329,8 +337,9 @@ class DemoSalesSeeder extends Seeder
                 continue;
             }
 
+            // Expired goods do not count: they cannot be sold (DESIGN.md §19).
             $needed = $line['qty'] * $unit->conversion + max($product->min_stock, 1);
-            if ($product->stock_on_hand >= $needed || isset($restock[$product->id])) {
+            if (app(StockLedger::class)->sellable($product) >= $needed || isset($restock[$product->id])) {
                 continue;
             }
 
@@ -357,16 +366,21 @@ class DemoSalesSeeder extends Seeder
             $order = $this->placeOrder($receiver, $supplierId, array_values($restock), $arrived->copy()->startOfDay());
             Carbon::setTestNow($arrived);
 
-            app(ReceivePurchaseOrder::class)->handle($order, $receiver, array_values($order->items->map(fn (PurchaseOrderItem $i) => [
+            app(ReceivePurchaseOrder::class)->handle($order, $receiver, array_values($order->items->map(fn (PurchaseOrderItem $i) => array_filter([
                 'purchase_order_item_id' => $i->id,
                 'qty' => $i->qty,
                 'unit_price' => $i->unit_price,
-            ])->all()), $arrived, 'Restok');
+                'batches' => CatalogSeeder::batchesFor($i->product, $i->qty, $arrived),
+            ], fn ($v) => $v !== null))->all()), $arrived, 'Restok');
 
             return;
         }
 
-        app(ReceiveGoods::class)->handle($receiver, array_values($restock), $supplierId, now(), 'Restok');
+        $lines = array_map(fn (array $line) => array_filter([
+            ...$line,
+            'batches' => CatalogSeeder::batchesFor(Product::query()->findOrFail($line['product_id']), $line['qty'], now()),
+        ], fn ($v) => $v !== null), array_values($restock));
+        app(ReceiveGoods::class)->handle($receiver, $lines, $supplierId, now(), 'Restok');
     }
 
     /**
@@ -392,11 +406,12 @@ class DemoSalesSeeder extends Seeder
         Carbon::setTestNow($until->subDays(4)->setTime(10, 0));
         $partial = $this->placeOrder($receiver, $supplierId, $pick(0, 3), $until, 'Order mingguan');
         Carbon::setTestNow($until->subDay()->setTime(21, 0));
-        app(ReceivePurchaseOrder::class)->handle($partial, $receiver, array_values($partial->items->map(fn (PurchaseOrderItem $i, int $n) => [
+        app(ReceivePurchaseOrder::class)->handle($partial, $receiver, array_values($partial->items->map(fn (PurchaseOrderItem $i, int $n) => array_filter([
             'purchase_order_item_id' => $i->id,
             'qty' => $n === 0 ? $i->qty : intdiv($i->qty, 2),
             'unit_price' => $i->unit_price,
-        ])->all()), now(), 'Kiriman pertama, sisanya menyusul');
+            'batches' => CatalogSeeder::batchesFor($i->product, $n === 0 ? $i->qty : intdiv($i->qty, 2), now()),
+        ], fn ($v) => $v !== null))->all()), now(), 'Kiriman pertama, sisanya menyusul');
 
         Carbon::setTestNow($until->subDays(5)->setTime(11, 0));
         $this->placeOrder($receiver, $supplierId, $pick(3, 2), $until->subDays(2), 'Belum dikirim supplier');
@@ -410,6 +425,50 @@ class DemoSalesSeeder extends Seeder
             ['supplier_id' => $supplierId, 'expected_at' => null, 'note' => 'Cek harga dulu'],
             $pick(8, 2),
         );
+    }
+
+    /**
+     * The shelf on the last morning (DESIGN.md §19): a count per batch finds one carton of
+     * milk short and two forgotten trays of bread past their date behind the rack. The older
+     * tray is thrown away at once; the other is left for the expiry card. Then milk that
+     * keeps only five days arrives, so every column of the card has something in it.
+     */
+    private function expiryAtTheEnd(User $receiver, ?int $supplierId, CarbonImmutable $until): void
+    {
+        $milk = Product::query()->where('sku', 'SUS-001')->first();
+        $bread = Product::query()->where('sku', 'ROT-001')->first();
+        if ($milk === null || $bread === null || ! $milk->tracks_expiry || ! $bread->tracks_expiry) {
+            return;
+        }
+
+        Carbon::setTestNow($until->setTime(7, 0));
+        $count = fn (Product $p, int $short) => $p->batches()->where('qty_on_hand', '>', 0)->fefo()->get()
+            ->values()
+            ->map(fn (StockBatch $b, int $n) => ['stock_batch_id' => $b->id, 'counted_qty' => max(0, $b->qty_on_hand - ($n === 0 ? $short : 0))])
+            ->all();
+
+        $opname = app(CreateStockOpname::class)->handle($receiver, [$milk->id => 0, $bread->id => 0], 'Cek tanggal kedaluwarsa', [
+            $milk->id => array_values($count($milk, 1)),
+            $bread->id => [
+                ...array_values($count($bread, 0)),
+                ['expires_on' => $until->subDays(4)->toDateString(), 'code' => 'RAK-B', 'counted_qty' => 4],
+                ['expires_on' => $until->subDays(2)->toDateString(), 'code' => 'RAK-B', 'counted_qty' => 3],
+            ],
+        ]);
+        app(PostStockOpname::class)->handle($opname, $receiver);
+
+        Carbon::setTestNow($until->setTime(7, 10));
+        $oldest = $bread->batches()->where('code', 'RAK-B')->orderBy('expires_on')->firstOrFail();
+        app(DisposeStock::class)->handle($receiver, [['stock_batch_id' => $oldest->id, 'qty' => $oldest->qty_on_hand]], 'Kedaluwarsa, ditemukan saat opname');
+
+        Carbon::setTestNow($until->setTime(7, 15));
+        app(ReceiveGoods::class)->handle($receiver, [[
+            'product_id' => $milk->id,
+            'unit_id' => (int) Unit::query()->where('name', 'dus')->value('id'),
+            'qty' => 1,
+            'unit_price' => 118_900,
+            'batches' => [['expires_on' => $until->addDays(5)->toDateString(), 'qty' => 1, 'code' => 'PROMO']],
+        ]], $supplierId, now(), 'Susu promo, umur pendek');
     }
 
     /** @param  list<array{product_id: int, unit_id: int, qty: int, unit_price: int}>  $lines */

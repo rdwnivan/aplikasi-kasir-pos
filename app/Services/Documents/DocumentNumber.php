@@ -25,6 +25,9 @@ final class DocumentNumber
     /** Kasbon paid off (pelunasan), DESIGN.md §17. */
     public const CUSTOMER_PAYMENT = 'PAY';
 
+    /** Expired goods thrown away, DESIGN.md §19. */
+    public const STOCK_DISPOSAL = 'DSP';
+
     public function next(string $prefix, ?CarbonInterface $date = null): string
     {
         $key = $prefix.'-'.($date ?? now())->format('Ymd');

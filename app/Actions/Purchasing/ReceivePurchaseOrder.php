@@ -23,7 +23,7 @@ final class ReceivePurchaseOrder
     public function __construct(private readonly ReceiveGoods $receive) {}
 
     /**
-     * @param  list<array{purchase_order_item_id: int, qty: int, unit_price: int}>  $lines
+     * @param  list<array{purchase_order_item_id: int, qty: int, unit_price: int, batches?: list<array{expires_on: string, qty: int, code?: string|null}>}>  $lines
      */
     public function handle(
         PurchaseOrder $order,
@@ -73,6 +73,9 @@ final class ReceivePurchaseOrder
                         'qty' => $line['qty'],
                         'unit_price' => $line['unit_price'],
                         'purchase_order_item_id' => $item->id,
+                        // Expiry dates for goods that track them; errors point back at this line.
+                        'batches' => $line['batches'] ?? [],
+                        'line' => $i,
                     ];
                 }
             }

@@ -10,6 +10,7 @@ use App\Http\Requests\Inventory\StockOpnameRequest;
 use App\Models\Category;
 use App\Models\StockOpname;
 use App\Models\StockOpnameItem;
+use App\Models\StockOpnameItemBatch;
 use App\Support\Decimal;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -61,7 +62,7 @@ class StockOpnameController extends Controller
 
     public function store(StockOpnameRequest $request, CreateStockOpname $create): RedirectResponse
     {
-        $opname = $create->handle($request->user(), $request->counts(), $request->validated('note'));
+        $opname = $create->handle($request->user(), $request->counts(), $request->validated('note'), $request->batchCounts());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => "Draft {$opname->number} disimpan. Stok belum berubah sampai diposting."]);
 
@@ -70,7 +71,7 @@ class StockOpnameController extends Controller
 
     public function show(StockOpname $stockOpname): Response
     {
-        $stockOpname->load(['user', 'items' => fn ($q) => $q->with(['product' => fn ($p) => $p->withTrashed()->with('baseUnit')])]);
+        $stockOpname->load(['user', 'items' => fn ($q) => $q->with(['product' => fn ($p) => $p->withTrashed()->with('baseUnit'), 'batches.batch'])]);
         $posted = $stockOpname->isPosted();
 
         // HPP each difference was booked at, straight from the ledger.
@@ -81,7 +82,21 @@ class StockOpnameController extends Controller
         $items = $stockOpname->items
             ->sortBy(fn (StockOpnameItem $i) => $i->product->name)
             ->map(function (StockOpnameItem $item) use ($posted, $costs) {
-                $system = $posted ? (int) $item->system_qty : $item->product->stock_on_hand;
+                // Per batch for goods that track expiry (DESIGN.md §19): live while a draft.
+                $batches = $item->batches->sortBy('id')->map(function (StockOpnameItemBatch $line) use ($posted) {
+                    $system = $posted ? (int) $line->system_qty : ($line->batch->qty_on_hand ?? 0);
+
+                    return [
+                        'id' => $line->id,
+                        'label' => $line->label(),
+                        'expiresOn' => ($line->batch->expires_on ?? $line->expires_on)?->toDateString(),
+                        'systemQty' => $system,
+                        'countedQty' => $line->counted_qty,
+                        'difference' => $posted ? (int) $line->difference : $line->counted_qty - $system,
+                    ];
+                })->values();
+
+                $system = $posted ? (int) $item->system_qty : ($batches->isEmpty() ? $item->product->stock_on_hand : (int) $batches->sum('systemQty'));
                 $difference = $posted ? (int) $item->difference : $item->counted_qty - $system;
                 $unitCost = $posted ? (string) ($costs[$item->product_id] ?? $item->product->avg_cost) : (string) $item->product->avg_cost;
 
@@ -95,6 +110,7 @@ class StockOpnameController extends Controller
                     'countedQty' => $item->counted_qty,
                     'difference' => $difference,
                     'value' => (int) round((float) Decimal::mul((string) $difference, $unitCost)),
+                    'batches' => $batches->all(),
                 ];
             })
             ->values()
@@ -126,6 +142,15 @@ class StockOpnameController extends Controller
                 'number' => $stockOpname->number,
                 'note' => $stockOpname->note,
                 'counts' => $stockOpname->items()->pluck('counted_qty', 'product_id'),
+                'batchCounts' => $stockOpname->items()->with('batches')->get()
+                    ->filter(fn (StockOpnameItem $item) => $item->batches->isNotEmpty())
+                    ->mapWithKeys(fn (StockOpnameItem $item) => [$item->product_id => $item->batches->sortBy('id')->map(fn (StockOpnameItemBatch $line) => [
+                        'stock_batch_id' => $line->stock_batch_id,
+                        'expires_on' => $line->expires_on?->toDateString(),
+                        'code' => $line->code,
+                        'counted_qty' => $line->counted_qty,
+                    ])->values()->all()])
+                    ->all(),
             ],
             'products' => ProductOptions::active(),
             'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
@@ -134,7 +159,7 @@ class StockOpnameController extends Controller
 
     public function update(StockOpnameRequest $request, StockOpname $stockOpname, UpdateStockOpname $update): RedirectResponse
     {
-        $update->handle($stockOpname, $request->counts(), $request->validated('note'));
+        $update->handle($stockOpname, $request->counts(), $request->validated('note'), $request->batchCounts());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => "Draft {$stockOpname->number} diperbarui."]);
 

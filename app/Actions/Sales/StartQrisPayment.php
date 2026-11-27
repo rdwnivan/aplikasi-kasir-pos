@@ -9,6 +9,7 @@ use App\Models\ProductUnit;
 use App\Models\Sale;
 use App\Models\User;
 use App\Services\Documents\DocumentNumber;
+use App\Services\Inventory\StockLedger;
 use App\Services\Payments\MidtransClient;
 use App\Services\Payments\MidtransException;
 use App\Services\Sales\CartBuilder;
@@ -33,6 +34,7 @@ final class StartQrisPayment
         private readonly CartBuilder $carts,
         private readonly DocumentNumber $numbers,
         private readonly MidtransClient $midtrans,
+        private readonly StockLedger $ledger,
     ) {}
 
     /**
@@ -131,9 +133,11 @@ final class StartQrisPayment
 
         foreach ($needed as $productId => $qty) {
             $product = $products[$productId];
-            if ($product->stock_on_hand < $qty) {
+            // Goods that track expiry: only batches that have not expired count (DESIGN.md §19).
+            $sellable = $this->ledger->sellable($product);
+            if ($sellable < $qty) {
                 throw ValidationException::withMessages([
-                    'items' => "Stok {$product->name} tidak cukup (tersisa {$product->stock_on_hand}).",
+                    'items' => "Stok {$product->name} tidak cukup (tersisa {$sellable}).",
                 ]);
             }
         }

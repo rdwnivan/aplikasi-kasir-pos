@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Reports\Expiry;
 use App\Reports\InventoryValuation;
 use App\Reports\Receivables;
 use App\Reports\SalesSummary;
@@ -179,6 +180,37 @@ final class ReportTables
     }
 
     /** Kasbon owed per customer as of now, with its age (DESIGN.md §17). */
+    /** Batches with stock by expiry status (DESIGN.md §19), optionally one status only. */
+    public static function expiry(?string $status = null): ReportDocument
+    {
+        $report = Expiry::build($status);
+        $asOf = CarbonImmutable::now(DateRange::TIMEZONE);
+
+        return (new ReportDocument(
+            'Laporan kedaluwarsa',
+            'Per '.$asOf->translatedFormat('j M Y H.i').' WIB',
+            "Batch bersisa dari produk yang dilacak kedaluwarsanya. Hampir kedaluwarsa = {$report['warnDays']} hari lagi atau kurang. Nilai = sisa × HPP rata-rata.",
+            'laporan-kedaluwarsa-'.$asOf->format('Y-m-d'),
+        ))->sheet(
+            'Kedaluwarsa',
+            [
+                ['label' => 'SKU', 'width' => 12],
+                ['label' => 'Produk', 'width' => 28],
+                ['label' => 'Kode batch', 'width' => 12],
+                ['label' => 'Kedaluwarsa', 'kind' => 'date', 'width' => 13],
+                ['label' => 'Sisa', 'format' => Spreadsheet::NUMBER, 'width' => 8],
+                ['label' => 'Satuan', 'width' => 8],
+                ['label' => 'HPP rata-rata', 'format' => Spreadsheet::RUPIAH_CENTS, 'width' => 15],
+                ['label' => 'Nilai', 'format' => Spreadsheet::RUPIAH, 'width' => 14],
+                ['label' => 'Status', 'width' => 18],
+            ],
+            array_map(fn (array $r) => [
+                $r['sku'], $r['product'], $r['code'] ?? '', $r['expiresOn'] ?? '', $r['qty'], $r['baseUnit'], $r['avgCost'], $r['value'], $r['statusLabel'],
+            ], $report['rows']),
+            ['', 'Total', '', '', '', '', '', array_sum(array_column($report['rows'], 'value')), ''],
+        );
+    }
+
     public static function receivables(): ReportDocument
     {
         $report = Receivables::build();

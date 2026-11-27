@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property int $id
@@ -30,5 +31,11 @@ class StockOpnameItem extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    /** @return HasMany<StockOpnameItemBatch, $this> Per-batch counts (DESIGN.md §19). */
+    public function batches(): HasMany
+    {
+        return $this->hasMany(StockOpnameItemBatch::class);
     }
 }

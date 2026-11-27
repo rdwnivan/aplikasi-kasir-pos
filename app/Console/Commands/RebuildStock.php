@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Product;
+use App\Models\StockBatch;
 use App\Models\StockMovement;
 use App\Services\Inventory\StockLedger;
 use App\Support\Decimal;
@@ -46,6 +47,8 @@ class RebuildStock extends Command
             }
         });
 
+        $mismatches += $this->checkBatches();
+
         if ($mismatches === 0) {
             $this->info('Semua stok cocok dengan buku besar.');
 
@@ -57,6 +60,83 @@ class RebuildStock extends Command
             : "{$mismatches} produk tidak cocok. Jalankan dengan --fix untuk memperbaiki.");
 
         return $this->option('fix') ? self::SUCCESS : self::FAILURE;
+    }
+
+    /**
+     * Batches (DESIGN.md §19): each batch's cache equals the sum of its movements and never ran
+     * negative; a product that tracks expiry has no stock outside batches (its movements without
+     * a batch sum to 0, so its batches add up to its stock), and one that does not has nothing
+     * left in batches. Only batch caches can be repaired; stock outside batches needs a person.
+     */
+    private function checkBatches(): int
+    {
+        $mismatches = 0;
+
+        StockBatch::query()->with('product')->orderBy('id')->each(function (StockBatch $batch) use (&$mismatches) {
+            [$qty, $wentNegative] = self::replayBatch($batch->id);
+
+            if ($qty === $batch->qty_on_hand && ! $wentNegative) {
+                return;
+            }
+
+            $mismatches++;
+            $this->warn(sprintf(
+                '%s, batch %s: cache sisa=%d, ledger sisa=%d%s',
+                $batch->product->name,
+                $batch->label(),
+                $batch->qty_on_hand,
+                $qty,
+                $wentNegative ? ' (pernah negatif)' : '',
+            ));
+
+            if ($this->option('fix')) {
+                $batch->forceFill(['qty_on_hand' => $qty])->saveQuietly();
+            }
+        });
+
+        $outside = StockMovement::query()
+            ->whereNull('stock_batch_id')
+            ->groupBy('product_id')
+            ->selectRaw('product_id, SUM(qty) AS qty')
+            ->pluck('qty', 'product_id');
+        $inBatches = StockMovement::query()
+            ->whereNotNull('stock_batch_id')
+            ->groupBy('product_id')
+            ->selectRaw('product_id, SUM(qty) AS qty')
+            ->pluck('qty', 'product_id');
+
+        Product::withTrashed()->orderBy('id')->each(function (Product $product) use (&$mismatches, $outside, $inBatches) {
+            $loose = (int) ($outside[$product->id] ?? 0);
+            $batched = (int) ($inBatches[$product->id] ?? 0);
+
+            if ($product->tracks_expiry && $loose !== 0) {
+                $mismatches++;
+                $this->warn("{$product->name} ({$product->sku}): lacak kedaluwarsa, tetapi {$loose} stok tanpa batch.");
+            } elseif (! $product->tracks_expiry && $batched !== 0) {
+                $mismatches++;
+                $this->warn("{$product->name} ({$product->sku}): tidak lacak kedaluwarsa, tetapi {$batched} stok masih di batch.");
+            }
+        });
+
+        return $mismatches;
+    }
+
+    /**
+     * A batch's quantity from its raw movements, and whether the running total ever went negative.
+     *
+     * @return array{int, bool}
+     */
+    public static function replayBatch(int $batchId): array
+    {
+        $qty = 0;
+        $wentNegative = false;
+
+        StockMovement::query()->where('stock_batch_id', $batchId)->orderBy('id')->each(function (StockMovement $m) use (&$qty, &$wentNegative) {
+            $qty += $m->qty;
+            $wentNegative = $wentNegative || $qty < 0;
+        });
+
+        return [$qty, $wentNegative];
     }
 
     /**

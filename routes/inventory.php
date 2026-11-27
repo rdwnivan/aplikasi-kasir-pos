@@ -7,6 +7,7 @@ use App\Http\Controllers\Catalog\StockCardController;
 use App\Http\Controllers\Catalog\SupplierController;
 use App\Http\Controllers\Catalog\UnitController;
 use App\Http\Controllers\Inventory\GoodsReceiptController;
+use App\Http\Controllers\Inventory\StockDisposalController;
 use App\Http\Controllers\Inventory\StockOpnameController;
 use App\Http\Controllers\Purchasing\PurchaseOrderController;
 use Illuminate\Support\Facades\Route;
@@ -61,4 +62,10 @@ Route::middleware(['auth', 'verified', 'role:'.Role::Owner->value.'|'.Role::Ware
         ->names('stock-opnames');
     Route::post('stok-opname/{stockOpname}/posting', [StockOpnameController::class, 'post'])
         ->name('stock-opnames.post');
+
+    // Buang barang kedaluwarsa (DESIGN.md §19).
+    Route::resource('stok-dibuang', StockDisposalController::class)
+        ->only(['index', 'create', 'store', 'show'])
+        ->parameters(['stok-dibuang' => 'stockDisposal'])
+        ->names('stock-disposals');
 });

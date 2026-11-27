@@ -22,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property int $stock_on_hand Cache of SUM(stock_movements.qty); written only by StockLedger.
  * @property string $avg_cost Moving-average HPP per base unit; written only by StockLedger.
  * @property bool $is_active
+ * @property bool $tracks_expiry Batch & expiry tracking (DESIGN.md §19); switched only through StockLedger.
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
@@ -39,6 +40,7 @@ class Product extends Model
             'stock_on_hand' => 'integer',
             'avg_cost' => 'decimal:4',
             'is_active' => 'boolean',
+            'tracks_expiry' => 'boolean',
         ];
     }
 
@@ -64,6 +66,12 @@ class Product extends Model
     public function stockMovements(): HasMany
     {
         return $this->hasMany(StockMovement::class);
+    }
+
+    /** @return HasMany<StockBatch, $this> */
+    public function batches(): HasMany
+    {
+        return $this->hasMany(StockBatch::class);
     }
 
     /** @param Builder<Product> $query */

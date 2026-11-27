@@ -44,6 +44,7 @@ type ProductRow = {
     minStock: number;
     avgCost: number;
     isActive: boolean;
+    tracksExpiry: boolean;
     archived: boolean;
     units: { unit: string; conversion: number; price: number }[];
 };
@@ -208,6 +209,14 @@ export default function ProductIndex({
                                                 {p.archived && (
                                                     <Badge variant="outline">
                                                         Arsip
+                                                    </Badge>
+                                                )}
+                                                {p.tracksExpiry && (
+                                                    <Badge
+                                                        variant="outline"
+                                                        title="Lacak tanggal kedaluwarsa"
+                                                    >
+                                                        Kedaluwarsa
                                                     </Badge>
                                                 )}
                                             </div>

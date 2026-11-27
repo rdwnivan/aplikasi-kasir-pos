@@ -1,4 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
+import { BatchStatusBadge } from '@/components/inventory/expiry';
 import { PageHeader } from '@/components/page-header';
 import { Pagination } from '@/components/pagination';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +16,8 @@ import { formatDateTime, formatQty } from '@/lib/format';
 import { formatRupiah } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import products from '@/routes/products';
-import type { Paginated } from '@/types';
+import stockDisposals from '@/routes/stock-disposals';
+import type { BatchStatus, Paginated } from '@/types';
 
 type Movement = {
     id: number;
@@ -29,6 +31,8 @@ type Movement = {
     user: string | null;
     note: string | null;
     reference: { label: string; url: string | null } | null;
+    batch: string | null;
+    batchId: number | null;
 };
 
 type Product = {
@@ -40,6 +44,16 @@ type Product = {
     minStock: number;
     avgCost: number;
     archived: boolean;
+    tracksExpiry: boolean;
+};
+
+type Batch = {
+    id: number;
+    label: string;
+    expiresOn: string | null;
+    code: string | null;
+    qty: number;
+    status: BatchStatus;
 };
 
 /** HPP is stored to 4 decimals; show cents only when they exist. */
@@ -51,11 +65,19 @@ function formatCost(value: number): string {
 
 export default function StockCard({
     product,
+    batches,
+    batchId,
     movements,
 }: {
     product: Product;
+    batches: Batch[];
+    batchId: number | null;
     movements: Paginated<Movement>;
 }) {
+    const showBatch =
+        product.tracksExpiry || movements.data.some((m) => m.batch !== null);
+    const filtered = batches.find((b) => b.id === batchId);
+
     return (
         <>
             <Head title={`Kartu stok ${product.name}`} />
@@ -86,6 +108,93 @@ export default function StockCard({
                     />
                 </div>
 
+                {product.tracksExpiry && (
+                    <Card className="gap-2 py-4">
+                        <CardContent className="space-y-2 px-4">
+                            <div className="flex items-baseline justify-between gap-2">
+                                <h2 className="font-semibold">Batch</h2>
+                                <p className="text-xs text-muted-foreground">
+                                    Keluar dari kedaluwarsa paling awal; batch
+                                    kedaluwarsa tidak dijual.
+                                </p>
+                            </div>
+                            {batches.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                    Belum ada batch bersisa.
+                                </p>
+                            ) : (
+                                <ul className="divide-y rounded-lg border text-sm">
+                                    {batches.map((b) => (
+                                        <li
+                                            key={b.id}
+                                            className={cn(
+                                                'flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2',
+                                                b.id === batchId && 'bg-muted',
+                                            )}
+                                        >
+                                            <Link
+                                                href={products.stockCard(
+                                                    product.id,
+                                                    {
+                                                        query: {
+                                                            batch:
+                                                                b.id === batchId
+                                                                    ? undefined
+                                                                    : b.id,
+                                                        },
+                                                    },
+                                                )}
+                                                className="min-w-0 flex-1 font-medium underline-offset-2 hover:underline"
+                                                title={
+                                                    b.id === batchId
+                                                        ? 'Tampilkan semua pergerakan'
+                                                        : 'Tampilkan pergerakan batch ini'
+                                                }
+                                            >
+                                                {b.label}
+                                            </Link>
+                                            <BatchStatusBadge
+                                                status={b.status}
+                                            />
+                                            <span className="w-24 text-right tabular-nums">
+                                                {formatQty(b.qty)}{' '}
+                                                {product.baseUnit}
+                                            </span>
+                                            {b.qty > 0 && (
+                                                <Link
+                                                    href={stockDisposals.create(
+                                                        {
+                                                            query: {
+                                                                batch: b.id,
+                                                            },
+                                                        },
+                                                    )}
+                                                    className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                                                >
+                                                    Buang
+                                                </Link>
+                                            )}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </CardContent>
+                    </Card>
+                )}
+
+                {filtered && (
+                    <p className="text-sm text-muted-foreground">
+                        Pergerakan batch {filtered.label}. Kolom Saldo tetap
+                        stok seluruh produk.{' '}
+                        <Link
+                            href={products.stockCard(product.id)}
+                            className="underline underline-offset-2"
+                        >
+                            Tampilkan semua
+                        </Link>
+                    </p>
+                )}
+
                 <div className="rounded-xl border">
                     <Table>
                         <TableHeader>
@@ -93,6 +202,7 @@ export default function StockCard({
                                 <TableHead>Waktu</TableHead>
                                 <TableHead>Jenis</TableHead>
                                 <TableHead>Dokumen</TableHead>
+                                {showBatch && <TableHead>Batch</TableHead>}
                                 <TableHead className="text-right">
                                     Masuk
                                 </TableHead>
@@ -115,7 +225,7 @@ export default function StockCard({
                             {movements.data.length === 0 && (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={9}
+                                        colSpan={showBatch ? 10 : 9}
                                         className="py-10 text-center text-muted-foreground"
                                     >
                                         Belum ada pergerakan stok. Stok awal
@@ -147,6 +257,11 @@ export default function StockCard({
                                             '–')
                                         )}
                                     </TableCell>
+                                    {showBatch && (
+                                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                                            {m.batch ?? '–'}
+                                        </TableCell>
+                                    )}
                                     <TableCell className="text-right text-emerald-600 tabular-nums dark:text-emerald-400">
                                         {m.qty > 0 ? formatQty(m.qty) : ''}
                                     </TableCell>

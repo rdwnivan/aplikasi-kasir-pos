@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Purchasing;
 
+use App\Http\Requests\Inventory\GoodsReceiptRequest;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -17,6 +18,7 @@ class PurchaseOrderReceiptRequest extends FormRequest
             'items.*.purchase_order_item_id' => ['required', 'integer'],
             'items.*.qty' => ['required', 'integer', 'min:0', 'max:1000000'],
             'items.*.unit_price' => ['required', 'integer', 'min:0', 'max:1000000000'],
+            ...GoodsReceiptRequest::batchRules(),
         ];
     }
 
@@ -33,13 +35,14 @@ class PurchaseOrderReceiptRequest extends FormRequest
         ];
     }
 
-    /** @return list<array{purchase_order_item_id: int, qty: int, unit_price: int}> */
+    /** @return list<array{purchase_order_item_id: int, qty: int, unit_price: int, batches: list<array{expires_on: string, qty: int, code: string|null}>}> */
     public function items(): array
     {
         return array_values(array_map(fn (array $item) => [
             'purchase_order_item_id' => (int) $item['purchase_order_item_id'],
             'qty' => (int) $item['qty'],
             'unit_price' => (int) $item['unit_price'],
+            'batches' => GoodsReceiptRequest::batchesOf($item),
         ], $this->validated('items')));
     }
 

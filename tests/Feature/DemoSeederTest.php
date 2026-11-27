@@ -3,6 +3,7 @@
 use App\Enums\CustomerPaymentStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\Role;
+use App\Enums\StockMovementType;
 use App\Models\Customer;
 use App\Models\CustomerPayment;
 use App\Models\GoodsReceipt;
@@ -10,7 +11,11 @@ use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\Sale;
 use App\Models\SaleReturn;
+use App\Models\StockDisposal;
+use App\Models\StockMovement;
+use App\Models\StockOpname;
 use App\Models\User;
+use App\Reports\Expiry;
 use App\Reports\Receivables;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoUserSeeder;
@@ -102,4 +107,20 @@ it('seeds settled QRIS pelunasan through the real actions, without calling Midtr
         ->and(config('services.midtrans.server_key'))->toBe('real-key-kept');
 
     $this->artisan('receivables:rebuild')->assertSuccessful();
+});
+
+it('seeds products that track expiry, with expired, expiring and undisposed batches, through the real actions', function () {
+    config(['pos.demo_sales_history' => true, 'pos.expiry.warn_days' => 30]);
+    $this->seed(DatabaseSeeder::class);
+
+    expect(Product::query()->where('tracks_expiry', true)->pluck('sku')->sort()->values()->all())->toBe(['MNM-002', 'ROT-001', 'SUS-001'])
+        ->and(StockDisposal::query()->count())->toBeGreaterThanOrEqual(1)
+        ->and(StockOpname::query()->whereHas('items.batches')->count())->toBe(1)
+        ->and(StockMovement::query()->where('type', StockMovementType::Sale)->whereNotNull('stock_batch_id')->count())->toBeGreaterThan(20);
+
+    $report = Expiry::build();
+    expect($report['totals']['expired']['count'])->toBeGreaterThanOrEqual(1)
+        ->and(collect($report['rows'])->contains(fn (array $r) => $r['sku'] === 'SUS-001' && $r['days'] !== null && $r['days'] <= 7 && $r['days'] >= 0))->toBeTrue();
+
+    $this->artisan('stock:rebuild')->assertSuccessful();
 });

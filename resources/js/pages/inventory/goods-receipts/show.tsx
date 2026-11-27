@@ -1,4 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
+import { batchLabel } from '@/components/inventory/expiry';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -37,6 +38,14 @@ type Receipt = {
         conversion: number;
         unitPrice: number;
         subtotal: number;
+        tracksExpiry: boolean;
+        /** Per product, in base units, on the product's first line (DESIGN.md §19). */
+        batches: {
+            id: number;
+            expiresOn: string | null;
+            code: string | null;
+            qty: number;
+        }[];
     }[];
 };
 
@@ -113,6 +122,24 @@ export default function GoodsReceiptShow({ receipt }: { receipt: Receipt }) {
                                         <div className="text-xs text-muted-foreground">
                                             {item.sku}
                                         </div>
+                                        {item.batches.length > 0 && (
+                                            <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                                                {item.batches.map((b) => (
+                                                    <li key={b.id}>
+                                                        Kedaluwarsa{' '}
+                                                        {batchLabel(
+                                                            b.expiresOn,
+                                                            b.code,
+                                                        )}
+                                                        :{' '}
+                                                        <span className="tabular-nums">
+                                                            {formatQty(b.qty)}{' '}
+                                                            {item.baseUnit}
+                                                        </span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
                                     </TableCell>
                                     <TableCell className="text-right whitespace-nowrap tabular-nums">
                                         {formatQty(item.qty)} {item.unit}

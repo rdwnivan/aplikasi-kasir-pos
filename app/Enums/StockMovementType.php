@@ -9,6 +9,8 @@ enum StockMovementType: string
     case SaleReturn = 'sale_return';
     case Adjustment = 'adjustment';
     case Opname = 'opname';
+    /** Expired (or spoilt) goods thrown away from a batch (DESIGN.md §19). */
+    case Disposal = 'disposal';
 
     /**
      * Movement types whose incoming cost re-weights the moving-average HPP.
@@ -27,6 +29,7 @@ enum StockMovementType: string
             self::SaleReturn => 'Retur penjualan',
             self::Adjustment => 'Penyesuaian',
             self::Opname => 'Stok opname',
+            self::Disposal => 'Dibuang',
         };
     }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\Role;
 use App\Queries\LowStock;
 use App\Queries\OpenPurchaseOrders;
+use App\Reports\Expiry;
 use App\Reports\InventoryValuation;
 use App\Reports\Receivables;
 use App\Reports\SalesSummary;
@@ -39,6 +40,7 @@ class DashboardController extends Controller
                 'items' => LowStock::list(8),
             ] : null,
             'openOrders' => $canManageStock ? OpenPurchaseOrders::summary() : null,
+            'expiry' => $canManageStock ? Expiry::summary() : null,
             'overview' => $isOwner ? self::overview() : null,
         ]);
     }

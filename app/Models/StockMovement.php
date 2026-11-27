@@ -21,6 +21,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $reference_type
  * @property int|null $reference_id
  * @property int|null $user_id
+ * @property int|null $stock_batch_id Set on every movement of a product that tracks expiry (DESIGN.md §19).
  * @property string|null $note
  * @property Carbon $created_at
  */
@@ -52,6 +53,12 @@ class StockMovement extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    /** @return BelongsTo<StockBatch, $this> */
+    public function batch(): BelongsTo
+    {
+        return $this->belongsTo(StockBatch::class, 'stock_batch_id');
     }
 
     /** @return BelongsTo<User, $this> */

@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\Documents\DocumentNumber;
 use App\Services\Inventory\StockLedger;
 use App\Support\Decimal;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -29,7 +30,7 @@ final class ReceiveGoods
     ) {}
 
     /**
-     * @param  list<array{product_id: int, unit_id: int, qty: int, unit_price: int, purchase_order_item_id?: int}>  $items
+     * @param  list<array{product_id: int, unit_id: int, qty: int, unit_price: int, purchase_order_item_id?: int, batches?: list<array{expires_on: string, qty: int, code?: string|null}>, line?: int}>  $items
      */
     public function handle(
         User $user,
@@ -44,7 +45,7 @@ final class ReceiveGoods
         }
 
         $receivedAt ??= now();
-        $units = $this->resolveUnits($items);
+        $units = $this->resolveUnits($items, $receivedAt);
 
         return DB::transaction(function () use ($user, $items, $supplierId, $receivedAt, $note, $units, $purchaseOrder) {
             $receipt = GoodsReceipt::create([
@@ -89,6 +90,13 @@ final class ReceiveGoods
                     StockMovementType::Purchase,
                     reference: $receipt,
                     user: $user,
+                    batches: $unit->product->tracks_expiry
+                        ? array_map(fn (array $b) => [
+                            'expires_on' => $b['expires_on'],
+                            'code' => $b['code'] ?? null,
+                            'qty' => $b['qty'] * $unit->conversion,
+                        ], $items[$i]['batches'] ?? [])
+                        : null,
                 );
             }
 
@@ -101,10 +109,10 @@ final class ReceiveGoods
     /**
      * Validate every line up front so a bad line never leaves a half-posted receipt.
      *
-     * @param  list<array{product_id: int, unit_id: int, qty: int, unit_price: int, purchase_order_item_id?: int}>  $items
+     * @param  list<array{product_id: int, unit_id: int, qty: int, unit_price: int, purchase_order_item_id?: int, batches?: list<array{expires_on: string, qty: int, code?: string|null}>, line?: int}>  $items
      * @return array<int, ProductUnit>
      */
-    private function resolveUnits(array $items): array
+    private function resolveUnits(array $items, CarbonInterface $receivedAt): array
     {
         $resolved = [];
         $errors = [];
@@ -130,6 +138,11 @@ final class ReceiveGoods
             }
 
             $resolved[$i] = $unit;
+
+            $batchError = self::batchError($unit->product, $line, $receivedAt);
+            if ($batchError !== null) {
+                $errors['items.'.($line['line'] ?? $i).'.batches'] = $batchError;
+            }
         }
 
         if ($errors !== []) {
@@ -137,5 +150,37 @@ final class ReceiveGoods
         }
 
         return $resolved;
+    }
+
+    /**
+     * A product that tracks expiry needs its line split over expiry dates (counted in the
+     * line's unit) adding up to the line; one that does not takes no dates (DESIGN.md §19 P4).
+     *
+     * @param  array<string, mixed>  $line
+     */
+    private static function batchError(Product $product, array $line, CarbonInterface $receivedAt): ?string
+    {
+        $batches = $line['batches'] ?? [];
+
+        if (! $product->tracks_expiry) {
+            return $batches === [] ? null : "{$product->name} tidak melacak tanggal kedaluwarsa.";
+        }
+        if ($batches === []) {
+            return "Isi tanggal kedaluwarsa untuk {$product->name}.";
+        }
+
+        $sum = 0;
+        foreach ($batches as $batch) {
+            $date = CarbonImmutable::createFromFormat('!Y-m-d', (string) ($batch['expires_on'] ?? ''));
+            if (! $date instanceof CarbonImmutable || (int) ($batch['qty'] ?? 0) < 1) {
+                return 'Setiap tanggal kedaluwarsa butuh tanggal dan jumlah lebih dari 0.';
+            }
+            if ($date->toDateString() < $receivedAt->toDateString()) {
+                return 'Tanggal kedaluwarsa '.$date->settings(['locale' => 'id'])->translatedFormat('j M Y').' sudah lewat.';
+            }
+            $sum += (int) $batch['qty'];
+        }
+
+        return $sum === $line['qty'] ? null : "Jumlah per tanggal ({$sum}) harus sama dengan jumlah barang ({$line['qty']}).";
     }
 }

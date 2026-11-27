@@ -30,3 +30,13 @@ Route::middleware(['auth', 'verified', 'role:'.Role::Owner->value])
             });
         }
     });
+
+// Expiry: warehouse staff throw the goods away, so they see it too (DESIGN.md §19 P10).
+Route::middleware(['auth', 'verified', 'role:'.Role::Owner->value.'|'.Role::Warehouse->value])
+    ->prefix('laporan')
+    ->name('reports.')
+    ->group(function () {
+        Route::get('kedaluwarsa', [ReportController::class, 'expiry'])->name('expiry');
+        Route::get('excel/kedaluwarsa', [ReportExportController::class, 'expiry'])->name('export.expiry')->middleware('throttle:30,1')->defaults('format', 'xlsx');
+        Route::get('pdf/kedaluwarsa', [ReportExportController::class, 'expiry'])->name('pdf.expiry')->middleware('throttle:30,1')->defaults('format', 'pdf');
+    });

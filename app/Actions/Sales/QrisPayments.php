@@ -65,7 +65,9 @@ final class QrisPayments
                     return self::UNCHANGED;
                 }
 
-                $this->bookSaleStock($locked, $locked->user);
+                // Expiry is judged on the day the QR was made, so a QR paid just after midnight
+                // is not refused because its batch expired meanwhile (DESIGN.md §19 P5).
+                $this->bookSaleStock($locked, $locked->user, $locked->created_at);
 
                 $locked->forceFill([
                     'status' => SaleStatus::Completed,

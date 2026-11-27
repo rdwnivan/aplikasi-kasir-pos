@@ -8,6 +8,8 @@ use App\Models\Product;
 use App\Models\Supplier;
 use App\Models\Unit;
 use App\Models\User;
+use App\Services\Inventory\StockLedger;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Seeder;
 
 /**
@@ -36,7 +38,43 @@ class CatalogSeeder extends Seeder
         ['MDI-001', 'Sabun Lifebuoy 75g', 'Perawatan Diri', 'pcs', 8, [['pcs', 1, 4500, null], ['pak', 4, 17000, 13500]], 6],
         ['MDI-002', 'Pasta Gigi Pepsodent 190g', 'Perawatan Diri', 'pcs', 6, [['pcs', 1, 14500, 11500]], 12],
         ['RT-001', 'Rinso Anti Noda 770g', 'Kebutuhan Rumah', 'pcs', 5, [['pcs', 1, 24000, 19000]], 10],
+        ['SUS-001', 'Susu UHT Ultra Milk 250ml', 'Minuman', 'pcs', 24, [['pcs', 1, 6500, null], ['dus', 24, 150000, 118900]], 3],
+        ['ROT-001', 'Roti Tawar Sari Roti', 'Makanan', 'pcs', 5, [['pcs', 1, 16000, 12700]], 15],
     ];
+
+    /**
+     * Products that track expiry (DESIGN.md §19) and how many days a delivery keeps, from the
+     * day it arrives. Also used by DemoSalesSeeder for restocks.
+     */
+    public const SHELF_LIFE_DAYS = [
+        'MNM-002' => 120,
+        'SUS-001' => 45,
+        'ROT-001' => 3,
+    ];
+
+    /**
+     * Expiry dates for a delivery of $qty (in the line's unit) arriving on $arrived: a carton or
+     * two from an older lot that expires sooner, the rest fresh.
+     *
+     * @return list<array{expires_on: string, qty: int, code: null}>|null null for products that do not track expiry
+     */
+    public static function batchesFor(Product $product, int $qty, CarbonInterface $arrived): ?array
+    {
+        $days = self::SHELF_LIFE_DAYS[$product->sku] ?? null;
+        if ($days === null || ! $product->tracks_expiry) {
+            return null;
+        }
+
+        $fresh = $arrived->copy()->addDays($days)->toDateString();
+        if ($qty < 3 || $days < 10) {
+            return [['expires_on' => $fresh, 'qty' => $qty, 'code' => null]];
+        }
+
+        return [
+            ['expires_on' => $arrived->copy()->addDays(intdiv($days, 4))->toDateString(), 'qty' => 1, 'code' => null],
+            ['expires_on' => $fresh, 'qty' => $qty - 1, 'code' => null],
+        ];
+    }
 
     public function run(): void
     {
@@ -47,6 +85,7 @@ class CatalogSeeder extends Seeder
         );
 
         $lines = [];
+        $openingDay = now()->subDays(7);
 
         foreach (self::PRODUCTS as $i => [$sku, $name, $category, $baseUnit, $minStock, $units, $openingQty]) {
             $product = Product::query()->firstOrCreate(['sku' => $sku], [
@@ -69,18 +108,24 @@ class CatalogSeeder extends Seeder
                 ]);
             }
 
+            if (isset(self::SHELF_LIFE_DAYS[$sku])) {
+                app(StockLedger::class)->startTracking($product, $receiver);
+            }
+
             // Buy in the largest unit that has a purchase price.
             [$buyUnit, , , $buyPrice] = collect($units)->last(fn ($unit) => $unit[3] !== null);
-            $lines[] = [
+            $line = [
                 'product_id' => $product->id,
-                'unit_id' => Unit::query()->where('name', $buyUnit)->value('id'),
+                'unit_id' => (int) Unit::query()->where('name', $buyUnit)->value('id'),
                 'qty' => $openingQty,
                 'unit_price' => $buyPrice,
             ];
+            $batches = self::batchesFor($product, $openingQty, $openingDay);
+            $lines[] = $batches === null ? $line : [...$line, 'batches' => $batches];
         }
 
         if ($lines !== []) {
-            app(ReceiveGoods::class)->handle($receiver, $lines, $supplier->id, now()->subDays(7), 'Stok awal');
+            app(ReceiveGoods::class)->handle($receiver, $lines, $supplier->id, $openingDay, 'Stok awal');
         }
     }
 

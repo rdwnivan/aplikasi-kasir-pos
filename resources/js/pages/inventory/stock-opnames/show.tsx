@@ -1,6 +1,6 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { Pencil, Send, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { OpnameStatus } from '@/components/inventory/opname-status';
 import { PageHeader } from '@/components/page-header';
@@ -40,6 +40,14 @@ type Opname = {
         countedQty: number;
         difference: number;
         value: number;
+        /** Per-batch counts of a product that tracks expiry (DESIGN.md §19). */
+        batches: {
+            id: number;
+            label: string;
+            systemQty: number;
+            countedQty: number;
+            difference: number;
+        }[];
     }[];
 };
 
@@ -142,47 +150,71 @@ export default function StockOpnameShow({ opname }: { opname: Opname }) {
                         </TableHeader>
                         <TableBody>
                             {opname.items.map((item) => (
-                                <TableRow key={item.id}>
-                                    <TableCell>
-                                        <Link
-                                            href={products.stockCard(
-                                                item.productId,
+                                <Fragment key={item.id}>
+                                    <TableRow>
+                                        <TableCell>
+                                            <Link
+                                                href={products.stockCard(
+                                                    item.productId,
+                                                )}
+                                                className="font-medium hover:underline"
+                                            >
+                                                {item.product}
+                                            </Link>
+                                            <div className="text-xs text-muted-foreground">
+                                                {item.sku}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-right tabular-nums">
+                                            {formatQty(item.systemQty)}{' '}
+                                            {item.baseUnit}
+                                        </TableCell>
+                                        <TableCell className="text-right tabular-nums">
+                                            {formatQty(item.countedQty)}{' '}
+                                            {item.baseUnit}
+                                        </TableCell>
+                                        <TableCell
+                                            className={cn(
+                                                'text-right font-medium tabular-nums',
+                                                item.difference < 0 &&
+                                                    'text-destructive',
+                                                item.difference > 0 &&
+                                                    'text-emerald-600 dark:text-emerald-400',
                                             )}
-                                            className="font-medium hover:underline"
                                         >
-                                            {item.product}
-                                        </Link>
-                                        <div className="text-xs text-muted-foreground">
-                                            {item.sku}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-right tabular-nums">
-                                        {formatQty(item.systemQty)}{' '}
-                                        {item.baseUnit}
-                                    </TableCell>
-                                    <TableCell className="text-right tabular-nums">
-                                        {formatQty(item.countedQty)}{' '}
-                                        {item.baseUnit}
-                                    </TableCell>
-                                    <TableCell
-                                        className={cn(
-                                            'text-right font-medium tabular-nums',
-                                            item.difference < 0 &&
-                                                'text-destructive',
-                                            item.difference > 0 &&
-                                                'text-emerald-600 dark:text-emerald-400',
-                                        )}
-                                    >
-                                        {item.difference === 0
-                                            ? 'pas'
-                                            : `${item.difference > 0 ? '+' : ''}${formatQty(item.difference)}`}
-                                    </TableCell>
-                                    <TableCell className="text-right tabular-nums">
-                                        {item.value === 0
-                                            ? '–'
-                                            : formatRupiah(item.value)}
-                                    </TableCell>
-                                </TableRow>
+                                            {item.difference === 0
+                                                ? 'pas'
+                                                : `${item.difference > 0 ? '+' : ''}${formatQty(item.difference)}`}
+                                        </TableCell>
+                                        <TableCell className="text-right tabular-nums">
+                                            {item.value === 0
+                                                ? '–'
+                                                : formatRupiah(item.value)}
+                                        </TableCell>
+                                    </TableRow>
+                                    {item.batches.map((b) => (
+                                        <TableRow
+                                            key={`b-${b.id}`}
+                                            className="bg-muted/30 text-sm"
+                                        >
+                                            <TableCell className="pl-8 text-muted-foreground">
+                                                Kedaluwarsa {b.label}
+                                            </TableCell>
+                                            <TableCell className="text-right tabular-nums">
+                                                {formatQty(b.systemQty)}
+                                            </TableCell>
+                                            <TableCell className="text-right tabular-nums">
+                                                {formatQty(b.countedQty)}
+                                            </TableCell>
+                                            <TableCell className="text-right tabular-nums">
+                                                {b.difference === 0
+                                                    ? 'pas'
+                                                    : `${b.difference > 0 ? '+' : ''}${formatQty(b.difference)}`}
+                                            </TableCell>
+                                            <TableCell />
+                                        </TableRow>
+                                    ))}
+                                </Fragment>
                             ))}
                         </TableBody>
                         <TableFooter>

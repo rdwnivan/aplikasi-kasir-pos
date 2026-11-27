@@ -48,6 +48,12 @@ class ReportExportController extends Controller
         return $this->download(ReportTables::receivables(), $format, $request);
     }
 
+    /** Owner and warehouse staff (DESIGN.md §19 P10). */
+    public function expiry(Request $request, string $format): Response
+    {
+        return $this->download(ReportTables::expiry($request->string('status')->toString() ?: null), $format, $request);
+    }
+
     private function download(ReportDocument $document, string $format, Request $request): Response
     {
         if ($format === 'xlsx') {

@@ -4,6 +4,7 @@ namespace App\Actions\Inventory;
 
 use App\Enums\StockMovementType;
 use App\Models\StockOpname;
+use App\Models\StockOpnameItem;
 use App\Models\User;
 use App\Services\Inventory\StockLedger;
 use Illuminate\Support\Facades\DB;
@@ -28,7 +29,13 @@ final class PostStockOpname
                 throw ValidationException::withMessages(['opname' => "Stok opname {$locked->number} sudah diposting."]);
             }
 
-            foreach ($locked->items()->with('product')->orderBy('product_id')->get() as $item) {
+            foreach ($locked->items()->with(['product', 'batches.batch'])->orderBy('product_id')->get() as $item) {
+                if ($item->product->tracks_expiry) {
+                    $this->postBatches($locked, $item, $user);
+
+                    continue;
+                }
+
                 $movement = $this->ledger->adjustTo(
                     $item->product,
                     $item->counted_qty,
@@ -52,5 +59,44 @@ final class PostStockOpname
 
             return $locked->load('items');
         });
+    }
+
+    /**
+     * A product that tracks expiry: each counted batch is set to its count (batches left off
+     * the count are not touched), one opname movement per batch that differs (DESIGN.md §19).
+     */
+    private function postBatches(StockOpname $opname, StockOpnameItem $item, User $user): void
+    {
+        if ($item->batches->isEmpty()) {
+            throw ValidationException::withMessages([
+                'opname' => "{$item->product->name} kini melacak tanggal kedaluwarsa: ubah draft ini dan hitung per tanggal.",
+            ]);
+        }
+
+        $systemTotal = 0;
+        $differenceTotal = 0;
+
+        foreach ($item->batches->sortBy('id') as $line) {
+            $movement = $this->ledger->adjustBatchTo(
+                $item->product,
+                $line->batch ?? ['expires_on' => $line->expires_on?->toDateString(), 'code' => $line->code],
+                $line->counted_qty,
+                StockMovementType::Opname,
+                reference: $opname,
+                user: $user,
+            );
+
+            $difference = $movement === null ? 0 : $movement->qty;
+            $line->forceFill([
+                'stock_batch_id' => $line->stock_batch_id ?? $movement?->stock_batch_id,
+                'system_qty' => $line->counted_qty - $difference,
+                'difference' => $difference,
+            ])->save();
+
+            $systemTotal += $line->counted_qty - $difference;
+            $differenceTotal += $difference;
+        }
+
+        $item->forceFill(['system_qty' => $systemTotal, 'difference' => $differenceTotal])->save();
     }
 }

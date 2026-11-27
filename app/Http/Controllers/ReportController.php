@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Reports\Expiry;
 use App\Reports\InventoryValuation;
 use App\Reports\Receivables;
 use App\Reports\SalesSummary;
@@ -40,6 +41,18 @@ class ReportController extends Controller
     {
         return Inertia::render('reports/inventory', [
             'report' => InventoryValuation::build(),
+            'asOf' => now()->toIso8601String(),
+        ]);
+    }
+
+    /** Batches with stock by expiry status (DESIGN.md §19); owner and warehouse staff. */
+    public function expiry(Request $request): Response
+    {
+        $status = in_array($request->query('status'), Expiry::STATUSES, true) ? (string) $request->query('status') : null;
+
+        return Inertia::render('reports/expiry', [
+            'report' => Expiry::build($status),
+            'filters' => ['status' => $status],
             'asOf' => now()->toIso8601String(),
         ]);
     }

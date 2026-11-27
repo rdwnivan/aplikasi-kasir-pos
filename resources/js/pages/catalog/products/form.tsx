@@ -44,6 +44,7 @@ type ProductData = {
     base_unit_id: number;
     min_stock: number;
     is_active: boolean;
+    tracks_expiry: boolean;
     stock: number;
     avgCost: number;
     hasHistory: boolean;
@@ -57,6 +58,7 @@ type FormData = {
     base_unit_id: number | null;
     min_stock: number;
     is_active: boolean;
+    tracks_expiry: boolean;
     units: UnitRow[];
 };
 
@@ -98,6 +100,7 @@ export default function ProductForm({
         base_unit_id: product?.base_unit_id ?? null,
         min_stock: product?.min_stock ?? 0,
         is_active: product?.is_active ?? true,
+        tracks_expiry: product?.tracks_expiry ?? false,
         units: initialUnits(product),
     });
     const errors = form.errors as Record<string, string | undefined>;
@@ -260,6 +263,31 @@ export default function ProductForm({
                             />
                             Aktif (muncul di layar kasir)
                         </label>
+                        <div className="space-y-1 sm:col-span-2">
+                            <label className="flex items-center gap-2 text-sm">
+                                <Checkbox
+                                    checked={form.data.tracks_expiry}
+                                    onCheckedChange={(v) =>
+                                        form.setData(
+                                            'tracks_expiry',
+                                            v === true,
+                                        )
+                                    }
+                                />
+                                Lacak tanggal kedaluwarsa
+                            </label>
+                            <p className="pl-6 text-xs text-muted-foreground">
+                                {form.data.tracks_expiry
+                                    ? product &&
+                                      !product.tracks_expiry &&
+                                      product.stock > 0
+                                        ? `Stok sekarang (${formatQty(product.stock)} ${baseName}) dicatat sebagai batch tanpa tanggal. Beri tanggal lewat stok opname.`
+                                        : 'Penerimaan barang wajib mengisi tanggal kedaluwarsa. Stok keluar dari batch paling awal, dan batch kedaluwarsa tidak bisa dijual.'
+                                    : product?.tracks_expiry
+                                      ? 'Semua batch akan dilepas; stok dan HPP tetap.'
+                                      : 'Untuk susu, roti, obat, minuman, dan barang lain yang punya tanggal kedaluwarsa.'}
+                            </p>
+                        </div>
                     </CardContent>
                 </Card>
 

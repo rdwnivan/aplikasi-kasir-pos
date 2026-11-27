@@ -1,5 +1,6 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import InputError from '@/components/input-error';
+import { ExpiryBatchesInput } from '@/components/inventory/expiry';
 import { PageHeader } from '@/components/page-header';
 import { RupiahInput } from '@/components/pos/rupiah-input';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,7 @@ import { formatQty } from '@/lib/format';
 import { formatRupiah } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import purchaseOrders from '@/routes/purchase-orders';
+import type { BatchInput } from '@/types';
 
 type Order = {
     id: number;
@@ -19,6 +21,7 @@ type Order = {
         id: number;
         product: string;
         sku: string;
+        tracksExpiry: boolean;
         unit: string;
         baseUnit: string;
         conversion: number;
@@ -29,7 +32,13 @@ type Order = {
     }[];
 };
 
-type Line = { purchase_order_item_id: number; qty: number; unit_price: number };
+type Line = {
+    purchase_order_item_id: number;
+    qty: number;
+    unit_price: number;
+    /** Only for products that track expiry (DESIGN.md §19). */
+    batches?: BatchInput[];
+};
 
 export default function PurchaseOrderReceive({
     order,
@@ -46,6 +55,9 @@ export default function PurchaseOrderReceive({
             purchase_order_item_id: i.id,
             qty: i.remaining,
             unit_price: i.unitPrice,
+            ...(i.tracksExpiry && {
+                batches: [{ expires_on: '', code: '', qty: i.remaining }],
+            }),
         })),
     });
     const errors = form.errors as Record<string, string | undefined>;
@@ -73,6 +85,10 @@ export default function PurchaseOrderReceive({
                     form.transform((data) => ({
                         ...data,
                         note: data.note || null,
+                        // Lines not received this time carry no expiry dates.
+                        items: data.items.map((l) =>
+                            l.qty > 0 ? l : { ...l, batches: undefined },
+                        ),
                     }));
                     form.submit(purchaseOrders.receive.store(order.id));
                 }}
@@ -164,14 +180,25 @@ export default function PurchaseOrderReceive({
                                             disabled={done}
                                             aria-label={`Jumlah diterima ${item.product}`}
                                             value={line.qty}
-                                            onChange={(e) =>
-                                                setLine(i, {
-                                                    qty:
-                                                        Number(
-                                                            e.target.value,
-                                                        ) || 0,
-                                                })
-                                            }
+                                            onChange={(e) => {
+                                                const qty =
+                                                    Number(e.target.value) || 0;
+                                                setLine(
+                                                    i,
+                                                    line.batches?.length === 1
+                                                        ? {
+                                                              qty,
+                                                              batches: [
+                                                                  {
+                                                                      ...line
+                                                                          .batches[0],
+                                                                      qty,
+                                                                  },
+                                                              ],
+                                                          }
+                                                        : { qty },
+                                                );
+                                            }}
                                         />
                                         <InputError
                                             message={errors[`items.${i}.qty`]}
@@ -213,6 +240,22 @@ export default function PurchaseOrderReceive({
                                                 </p>
                                             )}
                                     </div>
+                                    {line.batches && line.qty > 0 && (
+                                        <div className="sm:col-span-4">
+                                            <ExpiryBatchesInput
+                                                batches={line.batches}
+                                                lineQty={line.qty}
+                                                unit={item.unit}
+                                                minDate={form.data.received_at}
+                                                error={
+                                                    errors[`items.${i}.batches`]
+                                                }
+                                                onChange={(batches) =>
+                                                    setLine(i, { batches })
+                                                }
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}

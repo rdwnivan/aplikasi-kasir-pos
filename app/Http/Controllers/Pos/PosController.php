@@ -11,6 +11,7 @@ use App\Models\ProductUnit;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\Shift;
+use App\Models\StockBatch;
 use App\Services\Payments\MidtransClient;
 use App\Services\Sales\TaxSettings;
 use Illuminate\Http\Request;
@@ -121,6 +122,14 @@ class PosController extends Controller
      */
     private static function catalog(): array
     {
+        // Goods that track expiry show only what may still be sold (DESIGN.md §19).
+        $sellable = StockBatch::query()
+            ->where('qty_on_hand', '>', 0)
+            ->sellableOn(now())
+            ->groupBy('product_id')
+            ->selectRaw('product_id, SUM(qty_on_hand) AS qty')
+            ->pluck('qty', 'product_id');
+
         return array_values(ProductUnit::query()
             ->with(['product.category', 'unit'])
             ->whereHas('product', fn ($q) => $q->where('is_active', true))
@@ -136,7 +145,7 @@ class PosController extends Controller
                 'conversion' => $u->conversion,
                 'price' => $u->price,
                 'barcode' => $u->barcode,
-                'stock' => $u->product->stock_on_hand,
+                'stock' => $u->product->tracks_expiry ? (int) ($sellable[$u->product_id] ?? 0) : $u->product->stock_on_hand,
             ])
             ->all());
     }

@@ -55,6 +55,7 @@ class ProductController extends Controller
                 'minStock' => $p->min_stock,
                 'avgCost' => (float) $p->avg_cost,
                 'isActive' => $p->is_active,
+                'tracksExpiry' => $p->tracks_expiry,
                 'archived' => $p->trashed(),
                 'units' => $p->units->map(fn (ProductUnit $u) => [
                     'unit' => $u->unit->name,
@@ -80,7 +81,7 @@ class ProductController extends Controller
 
     public function store(ProductRequest $request, SaveProduct $save): RedirectResponse
     {
-        $product = $save->handle($request->productAttributes(), $request->units());
+        $product = $save->handle($request->productAttributes(), $request->units(), tracksExpiry: $request->tracksExpiry(), by: $request->user());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => "Produk {$product->name} ditambahkan."]);
 
@@ -100,6 +101,7 @@ class ProductController extends Controller
                 'base_unit_id' => $product->base_unit_id,
                 'min_stock' => $product->min_stock,
                 'is_active' => $product->is_active,
+                'tracks_expiry' => $product->tracks_expiry,
                 'stock' => $product->stock_on_hand,
                 'avgCost' => (float) $product->avg_cost,
                 'hasHistory' => DeleteProduct::hasHistory($product),
@@ -116,7 +118,7 @@ class ProductController extends Controller
 
     public function update(ProductRequest $request, Product $product, SaveProduct $save): RedirectResponse
     {
-        $save->handle($request->productAttributes(), $request->units(), $product);
+        $save->handle($request->productAttributes(), $request->units(), $product, $request->tracksExpiry(), $request->user());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => "Produk {$product->name} disimpan."]);
 

@@ -8,6 +8,7 @@ use App\Models\SaleItem;
 use App\Models\User;
 use App\Services\Inventory\StockLedger;
 use App\Support\Decimal;
+use Carbon\CarbonInterface;
 
 /**
  * Takes a sale's goods out of stock and records the HPP of each line. Call inside the
@@ -17,7 +18,11 @@ use App\Support\Decimal;
  */
 trait BooksSaleStock
 {
-    private function bookSaleStock(Sale $sale, User $user): void
+    /**
+     * Goods that track expiry leave first-expired-first-out from batches that may still be sold
+     * on $sellableOn (default today; a QRIS settlement passes the day its QR was made).
+     */
+    private function bookSaleStock(Sale $sale, User $user, ?CarbonInterface $sellableOn = null): void
     {
         // Lock products in a fixed order (by id) so two checkouts sharing products can
         // never deadlock waiting on each other.
@@ -32,6 +37,7 @@ trait BooksSaleStock
                 StockMovementType::Sale,
                 reference: $sale,
                 user: $user,
+                sellableOn: $sellableOn,
             );
 
             $cogs = Decimal::round(Decimal::mul((string) $movement->unit_cost, (string) $item->baseQty()));

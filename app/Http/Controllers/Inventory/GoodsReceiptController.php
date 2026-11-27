@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Inventory\GoodsReceiptRequest;
 use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptItem;
+use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Support\DateRange;
 use Illuminate\Database\Eloquent\Builder;
@@ -80,6 +81,18 @@ class GoodsReceiptController extends Controller
     {
         $goodsReceipt->load(['supplier', 'user', 'purchaseOrder', 'items' => fn ($q) => $q->with(['product' => fn ($p) => $p->withTrashed()->with('baseUnit'), 'unit'])]);
 
+        // Batches come from the receipt's own movements (one source, DESIGN.md §19 P4), per
+        // product in base units, shown once on the product's first line.
+        $batches = StockMovement::query()
+            ->with('batch')
+            ->where('reference_type', $goodsReceipt->getMorphClass())
+            ->where('reference_id', $goodsReceipt->id)
+            ->whereNotNull('stock_batch_id')
+            ->orderBy('id')
+            ->get()
+            ->groupBy('product_id');
+        $shown = [];
+
         return Inertia::render('inventory/goods-receipts/show', [
             'receipt' => [
                 'id' => $goodsReceipt->id,
@@ -94,18 +107,32 @@ class GoodsReceiptController extends Controller
                 'user' => $goodsReceipt->user->name,
                 'note' => $goodsReceipt->note,
                 'total' => $goodsReceipt->total,
-                'items' => $goodsReceipt->items->map(fn (GoodsReceiptItem $item) => [
-                    'id' => $item->id,
-                    'productId' => $item->product_id,
-                    'product' => $item->product->name,
-                    'sku' => $item->product->sku,
-                    'unit' => $item->unit->name,
-                    'baseUnit' => $item->product->baseUnit->name,
-                    'qty' => $item->qty,
-                    'conversion' => $item->conversion,
-                    'unitPrice' => $item->unit_price,
-                    'subtotal' => $item->subtotal,
-                ])->all(),
+                'items' => $goodsReceipt->items->map(function (GoodsReceiptItem $item) use ($batches, &$shown) {
+                    $first = ! isset($shown[$item->product_id]);
+                    $shown[$item->product_id] = true;
+
+                    return [
+                        'tracksExpiry' => isset($batches[$item->product_id]),
+                        'batches' => $first && isset($batches[$item->product_id])
+                            ? $batches[$item->product_id]->map(fn (StockMovement $m) => [
+                                'id' => $m->stock_batch_id,
+                                'expiresOn' => $m->batch?->expires_on?->toDateString(),
+                                'code' => $m->batch?->code,
+                                'qty' => $m->qty,
+                            ])->values()->all()
+                            : [],
+                        'id' => $item->id,
+                        'productId' => $item->product_id,
+                        'product' => $item->product->name,
+                        'sku' => $item->product->sku,
+                        'unit' => $item->unit->name,
+                        'baseUnit' => $item->product->baseUnit->name,
+                        'qty' => $item->qty,
+                        'conversion' => $item->conversion,
+                        'unitPrice' => $item->unit_price,
+                        'subtotal' => $item->subtotal,
+                    ];
+                })->all(),
             ],
         ]);
     }
