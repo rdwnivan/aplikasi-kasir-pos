@@ -41,6 +41,8 @@ type ProductRow = {
     category: string | null;
     baseUnit: string;
     stock: number;
+    /** Unexpired stock for goods that track expiry; equal to stock otherwise. */
+    sellableStock: number;
     minStock: number;
     avgCost: number;
     isActive: boolean;
@@ -191,7 +193,7 @@ export default function ProductIndex({
                                 const low =
                                     p.isActive &&
                                     !p.archived &&
-                                    p.stock <= p.minStock;
+                                    p.sellableStock <= p.minStock;
 
                                 return (
                                     <TableRow key={p.id}>
@@ -253,6 +255,12 @@ export default function ProductIndex({
                                                 {formatQty(p.stock)}{' '}
                                                 {p.baseUnit}
                                             </span>
+                                            {p.sellableStock !== p.stock && (
+                                                <div className="text-xs text-muted-foreground">
+                                                    bisa dijual{' '}
+                                                    {formatQty(p.sellableStock)}
+                                                </div>
+                                            )}
                                             {low && (
                                                 <div className="text-xs text-destructive">
                                                     min. {formatQty(p.minStock)}

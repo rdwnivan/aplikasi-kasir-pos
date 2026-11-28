@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Database\Factories\ProductFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -23,6 +24,7 @@ use Illuminate\Support\Carbon;
  * @property string $avg_cost Moving-average HPP per base unit; written only by StockLedger.
  * @property bool $is_active
  * @property bool $tracks_expiry Batch & expiry tracking (DESIGN.md §19); switched only through StockLedger.
+ * @property-read int|string|null $sellable_stock Only when queried withSellableStock(); PostgreSQL may return a string.
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
@@ -74,9 +76,44 @@ class Product extends Model
         return $this->hasMany(StockBatch::class);
     }
 
-    /** @param Builder<Product> $query */
-    public function scopeLowStock(Builder $query): void
+    /**
+     * Products at or below their minimum, judged on sellable stock: expired
+     * batches still on the shelf cannot be sold, so they do not keep a product off the list.
+     *
+     * @param  Builder<Product>  $query
+     */
+    public function scopeLowStock(Builder $query, ?CarbonInterface $on = null): void
     {
-        $query->whereColumn('stock_on_hand', '<=', 'min_stock');
+        $query->where('products.min_stock', '>=', self::sellableStock($on ?? now()));
+    }
+
+    /**
+     * Adds `sellable_stock`: what may still be sold on $on. For goods that track expiry that
+     * is their unexpired batches (the till's figure, DESIGN.md §19); for the rest, stock on hand.
+     *
+     * @param  Builder<Product>  $query
+     */
+    public function scopeWithSellableStock(Builder $query, ?CarbonInterface $on = null): void
+    {
+        if ($query->getQuery()->columns === null) {
+            $query->select('products.*');
+        }
+        $query->selectSub(self::sellableStock($on ?? now()), 'sellable_stock');
+    }
+
+    /**
+     * Correlated subquery for one product's sellable stock, using the same
+     * StockBatch::sellableOn() as the till and the ledger. An aggregate without GROUP BY
+     * always returns one row, so products without batches still get their stock on hand.
+     *
+     * @return Builder<StockBatch>
+     */
+    private static function sellableStock(CarbonInterface $on): Builder
+    {
+        return StockBatch::query()
+            ->selectRaw('CASE WHEN products.tracks_expiry THEN COALESCE(SUM(stock_batches.qty_on_hand), 0) ELSE products.stock_on_hand END')
+            ->whereColumn('stock_batches.product_id', 'products.id')
+            ->where('stock_batches.qty_on_hand', '>', 0)
+            ->sellableOn($on);
     }
 }

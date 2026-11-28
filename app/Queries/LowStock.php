@@ -6,8 +6,9 @@ use App\Models\Product;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * Active products at or below their minimum stock (out of stock counts too). Archived and
- * inactive products are not something to reorder, so they are left out.
+ * Active products whose sellable stock is at or below their minimum (out of stock counts too;
+ * expired batches do not count as stock, DESIGN.md §19). Archived and inactive products are
+ * not something to reorder, so they are left out.
  */
 final class LowStock
 {
@@ -30,8 +31,9 @@ final class LowStock
     public static function list(int $limit = 10): array
     {
         return array_values(self::query()
+            ->withSellableStock()
             ->with('baseUnit')
-            ->orderBy('stock_on_hand')
+            ->orderBy('sellable_stock')
             ->orderByDesc('min_stock')
             ->orderBy('name')
             ->limit($limit)
@@ -41,7 +43,7 @@ final class LowStock
                 'sku' => $p->sku,
                 'name' => $p->name,
                 'baseUnit' => $p->baseUnit->name,
-                'stock' => $p->stock_on_hand,
+                'stock' => (int) $p->sellable_stock,
                 'minStock' => $p->min_stock,
             ])
             ->all());

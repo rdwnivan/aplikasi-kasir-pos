@@ -44,6 +44,7 @@ final class PurchaseSuggestions
             ->pluck('unit_id', 'product_id');
 
         return array_values(LowStock::query()
+            ->withSellableStock()
             ->with('units')
             ->orderBy('name')
             ->get()
@@ -57,7 +58,8 @@ final class PurchaseSuggestions
                     return null;
                 }
 
-                $shortfall = 2 * $product->min_stock - $product->stock_on_hand;
+                // Expired batches will be thrown away, so only sellable stock offsets the order.
+                $shortfall = 2 * $product->min_stock - (int) $product->sellable_stock;
 
                 return [
                     'product_id' => $product->id,

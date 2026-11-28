@@ -29,6 +29,7 @@ class ProductController extends Controller
         ];
 
         $products = Product::query()
+            ->withSellableStock()
             ->with(['category', 'baseUnit', 'units' => fn ($q) => $q->with('unit')->orderBy('conversion')])
             ->when($filters['status'] === 'archived', fn (Builder $q) => $q->onlyTrashed())
             ->when($filters['status'] === 'active', fn (Builder $q) => $q->where('is_active', true))
@@ -52,6 +53,7 @@ class ProductController extends Controller
                 'category' => $p->category?->name,
                 'baseUnit' => $p->baseUnit->name,
                 'stock' => $p->stock_on_hand,
+                'sellableStock' => (int) $p->sellable_stock,
                 'minStock' => $p->min_stock,
                 'avgCost' => (float) $p->avg_cost,
                 'isActive' => $p->is_active,
